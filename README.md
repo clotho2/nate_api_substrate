@@ -112,6 +112,13 @@ cd frontend && npm run dev
 │  └─────────────┘  └─────────────┘             │
 │                                                  │
 │  ┌────────────────────────────────────────┐    │
+│  │        Graph RAG System               │    │
+│  │  • Knowledge graph retrieval          │    │
+│  │  • Neo4j (optional) or local DB       │    │
+│  │  • Relationship extraction            │    │
+│  └────────────────────────────────────────┘    │
+│                                                  │
+│  ┌────────────────────────────────────────┐    │
 │  │        MCP Integration                 │    │
 │  │  • Code execution sandbox              │    │
 │  │  • Browser automation (Playwright)     │    │
@@ -120,12 +127,12 @@ cd frontend && npm run dev
 │  └────────────────────────────────────────┘    │
 └──────────────────┬──────────────────────────────┘
                    │
-      ┌────────────┼────────────┐
-      │            │            │
-┌─────▼─────┐ ┌───▼────┐ ┌────▼─────┐
-│PostgreSQL │ │ChromaDB│ │MCP Servers│
-│Persistence│ │Vectors │ │(External) │
-└───────────┘ └────────┘ └──────────┘
+      ┌────────────┼────────────┬────────────┐
+      │            │            │            │
+┌─────▼─────┐ ┌───▼────┐ ┌────▼─────┐ ┌────▼─────┐
+│PostgreSQL │ │ChromaDB│ │MCP Servers│ │  Neo4j   │
+│Persistence│ │Vectors │ │(External) │ │(Optional)│
+└───────────┘ └────────┘ └──────────┘ └──────────┘
 ```
 
 ---
@@ -172,6 +179,12 @@ cd frontend && npm run dev
 - `discord_send_message` - Discord bot integration
 - `spotify_control` - Spotify playback control
 - `execute_code` - Sandboxed Python execution (MCP)
+
+### Graph RAG
+- `/api/graph/nodes` - Get graph nodes
+- `/api/graph/edges` - Get graph relationships
+- `/api/graph/stats` - Graph statistics
+- `/api/graph/rag` - Retrieve context from knowledge graph
 
 ### Browser Automation (MCP)
 - `navigate` - Browser navigation
