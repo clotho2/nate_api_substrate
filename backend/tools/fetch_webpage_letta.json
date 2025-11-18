@@ -1,0 +1,36 @@
+{
+  "id": "tool-13",
+  "tool_type": "letta_builtin",
+  "description": "Fetch a webpage and convert it to markdown/text format using Jina AI reader.",
+  "source_type": "python",
+  "name": "fetch_webpage",
+  "tags": [
+    "letta_builtin"
+  ],
+  "source_code": null,
+  "json_schema": {
+    "name": "fetch_webpage",
+    "description": "Fetch a webpage and convert it to markdown/text format using Jina AI reader.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string",
+          "description": "The URL of the webpage to fetch and convert"
+        }
+      },
+      "required": [
+        "url"
+      ]
+    }
+  },
+  "args_json_schema": null,
+  "return_char_limit": 50000,
+  "pip_requirements": null,
+  "npm_requirements": null,
+  "default_requires_approval": null,
+  "enable_parallel_execution": true,
+  "created_by_id": "user-d6b0c140-4b27-46b3-8110-59c07e9fdc52",
+  "last_updated_by_id": "user-f1f96a87-c52e-4039-9aae-e49c46ec158b",
+  "metadata_": {}
+}

@@ -1,0 +1,110 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+  
+  body {
+    @apply bg-background text-white overflow-x-hidden;
+  }
+
+  /* Hide scrollbar for Chrome, Safari and Opera */
+  ::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Hide scrollbar for IE, Edge and Firefox */
+  html {
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+  }
+}
+
+@layer utilities {
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+  }
+  
+  .focus\:not-sr-only:focus {
+    position: static;
+    width: auto;
+    height: auto;
+    padding: inherit;
+    margin: inherit;
+    overflow: visible;
+    clip: auto;
+    white-space: normal;
+  }
+}
+
+@layer components {
+  .neon-border {
+    @apply border border-limeGlow/50 shadow-neon;
+  }
+  
+  .glass-panel {
+    @apply bg-darkGlass backdrop-blur-md border border-lightGlass;
+  }
+  
+  .neon-text {
+    @apply text-limeGlow drop-shadow-[0_0_8px_rgba(198,255,0,0.7)];
+  }
+  
+  .neon-button {
+    @apply bg-gradient-to-r from-limeGlow to-aquaGlow text-background font-medium 
+    py-2 px-4 rounded-xl transition-all duration-300 hover:shadow-neon
+    active:scale-95;
+  }
+  
+  .violet-button {
+    @apply bg-gradient-to-r from-violetGlow to-[#7D4CDB] text-white font-medium 
+    py-2 px-4 rounded-xl transition-all duration-300 hover:shadow-violetNeon
+    active:scale-95;
+  }
+  
+  .radial-background {
+    @apply absolute inset-0 w-full h-full overflow-hidden -z-10;
+    background: radial-gradient(circle at 20% 20%, rgba(198, 255, 0, 0.08) 0%, transparent 40%),
+                radial-gradient(circle at 80% 80%, rgba(0, 245, 160, 0.08) 0%, transparent 40%),
+                radial-gradient(circle at 50% 50%, rgba(155, 93, 229, 0.05) 0%, transparent 60%);
+  }
+}
+
+/* Animations for background elements */
+.orb-animation-wrapper {
+  animation: orb-animation 20s infinite alternate ease-in-out;
+}
+
+@keyframes orb-animation {
+  0% {
+    transform: scale(1) rotate(0deg);
+    filter: hue-rotate(0deg);
+  }
+  50% {
+    transform: scale(1.05) rotate(180deg);
+    filter: hue-rotate(30deg);
+  }
+  100% {
+    transform: scale(1) rotate(360deg);
+    filter: hue-rotate(0deg);
+  }
+}
+
+/* Text gradient */
+.text-gradient {
+  background: linear-gradient(135deg, #C6FF00 0%, #00F5A0 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}

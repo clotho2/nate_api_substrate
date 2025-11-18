@@ -1,0 +1,11 @@
+.
+./frontend
+./frontend/src
+./backend
+./backend/tools
+./backend/core
+./backend/config
+./backend/letta_compat
+./backend/api
+./backend/data
+./backend/services
