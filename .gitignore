@@ -78,6 +78,9 @@ temp/
 # Personal data
 data/miu_full_identity.txt
 
+# Memory files (duplicates - use backend/ versions)
+/nate_real_memories.jsonl
+
 # Build files
 *.pyc
 *.pyo
