@@ -14,6 +14,7 @@ requests==2.31.0            # Sync HTTP for simple calls
 
 # Memory & Storage
 chromadb==0.4.18            # Vector database for archival memory
+numpy<2.0                   # ChromaDB 0.4.18 requires NumPy < 2.0
 
 # Ollama Integration (for local embeddings)
 ollama==0.1.7               # Official Ollama Python client
