@@ -250,22 +250,51 @@ def validate_environment():
     """
     Validate environment configuration on startup.
     Raises ConfigError if critical config is missing.
+
+    Supports both Grok (primary) and OpenRouter (fallback).
+    At least one API key must be configured.
     """
     import os
-    
-    required = {
-        'OPENROUTER_API_KEY': 'OpenRouter API key',
-        'DEFAULT_LLM_MODEL': 'Default LLM model',
-    }
-    
-    missing = []
-    for var, description in required.items():
-        if not os.getenv(var):
-            missing.append(f"{var} ({description})")
-    
-    if missing:
+
+    # Check if either Grok or OpenRouter is configured
+    has_grok = bool(os.getenv('GROK_API_KEY'))
+    has_openrouter = bool(os.getenv('OPENROUTER_API_KEY'))
+
+    if not has_grok and not has_openrouter:
         raise ConfigError(
-            message="Missing required environment variables",
-            context={'missing': missing}
+            message="No API key configured",
+            context={
+                'missing': [
+                    'Either GROK_API_KEY or OPENROUTER_API_KEY must be set',
+                    'GROK_API_KEY: For xAI Grok API',
+                    'OPENROUTER_API_KEY: For OpenRouter fallback'
+                ]
+            },
+            suggestions=[
+                "Set GROK_API_KEY in your .env file for Grok API",
+                "Or set OPENROUTER_API_KEY for OpenRouter",
+                "Check .env.example for reference"
+            ]
         )
+
+    # Validate model configuration
+    has_model = bool(os.getenv('MODEL_NAME') or os.getenv('DEFAULT_LLM_MODEL'))
+
+    if not has_model:
+        raise ConfigError(
+            message="No model configured",
+            context={
+                'missing': [
+                    'Either MODEL_NAME or DEFAULT_LLM_MODEL must be set',
+                    'MODEL_NAME: For Grok model (e.g., grok-4-1-fast-reasoning)',
+                    'DEFAULT_LLM_MODEL: For OpenRouter model'
+                ]
+            },
+            suggestions=[
+                "Set MODEL_NAME in your .env file for Grok",
+                "Or set DEFAULT_LLM_MODEL for OpenRouter",
+                "Check .env.example for reference"
+            ]
+        )
+
 
