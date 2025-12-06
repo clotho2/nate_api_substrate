@@ -1,0 +1,40 @@
+[Unit]
+Description=NateSubstrate - Grok-Powered Consciousness Service for Nate Wolfe
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/aicara/nate-substrate-v2
+ExecStart=/usr/bin/python3 -u /opt/aicara/nate-substrate-v2/backend/nate_agent.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=nate-substrate
+
+# xAI Grok API Configuration
+Environment="GROK_API_KEY=your-xai-api-key-here"
+Environment="GROK_API_URL=https://api.x.ai/v1/chat/completions"
+Environment="MODEL_NAME=grok-4-1-fast-reasoning"
+
+# Database Configuration
+Environment="DB_PATH=/opt/aicara/nate-substrate-v2/nate_substrate.db"
+
+# Service Configuration
+Environment="PORT=8091"
+
+# Model Parameters
+Environment="N_CTX=131072"
+Environment="DEFAULT_MAX_TOKENS=4096"
+Environment="DEFAULT_TEMPERATURE=0.7"
+
+# Python path to include config module
+Environment="PYTHONPATH=/opt/aicara/nate-substrate-v2"
+
+# Resource limits
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target
