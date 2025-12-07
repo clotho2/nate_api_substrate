@@ -437,7 +437,8 @@ def ollama_compat_chat():
         
         # Extract from Ollama format
         messages = data.get('messages', [])
-        model = data.get('model', os.getenv("DEFAULT_LLM_MODEL", "qwen/qwen-2.5-72b-instruct"))
+        # Use MODEL_NAME (Grok) or DEFAULT_LLM_MODEL (OpenRouter) - prefer Grok
+        model = data.get('model', os.getenv("MODEL_NAME") or os.getenv("DEFAULT_LLM_MODEL", "grok-4-1-fast-reasoning"))
         
         # Extract media (for multi-modal support!)
         media_data = data.get('media_data')  # Base64 encoded
@@ -600,7 +601,8 @@ def ollama_compat_chat_stream():
         
         # Extract from Ollama format
         messages = data.get('messages', [])
-        model = data.get('model', os.getenv("DEFAULT_LLM_MODEL", "qwen/qwen-2.5-72b-instruct"))
+        # Use MODEL_NAME (Grok) or DEFAULT_LLM_MODEL (OpenRouter) - prefer Grok
+        model = data.get('model', os.getenv("MODEL_NAME") or os.getenv("DEFAULT_LLM_MODEL", "grok-4-1-fast-reasoning"))
         session_id = data.get('session_id') or request.headers.get('X-Session-Id', 'default')
         message_type = data.get('message_type', 'inbox')
         
@@ -683,7 +685,7 @@ def get_agent_info():
         
         return jsonify({
             "name": state_manager.get_state("agent:name", "Assistant"),
-            "model": os.getenv("DEFAULT_LLM_MODEL", "qwen/qwen-2.5-72b-instruct"),
+            "model": os.getenv("MODEL_NAME") or os.getenv("DEFAULT_LLM_MODEL", "grok-4-1-fast-reasoning"),
             "system_prompt_length": len(state_manager.get_state("agent:system_prompt", "")),
             "memory_blocks": len(blocks),
             "blocks": [
@@ -822,7 +824,7 @@ def get_context_usage():
         tool_schemas = memory_tools.get_tool_schemas()
         
         # Get REAL context window from agent settings (NOT hardcoded!)
-        model = state_manager.get_state("agent.model", os.getenv("DEFAULT_LLM_MODEL", "qwen/qwen-2.5-72b-instruct"))
+        model = state_manager.get_state("agent.model", os.getenv("MODEL_NAME") or os.getenv("DEFAULT_LLM_MODEL", "grok-4-1-fast-reasoning"))
         max_tokens_str = state_manager.get_state("agent.context_window", "128000")
         
         try:
@@ -1026,7 +1028,7 @@ def get_debug_context():
         
         return jsonify({
             "session_id": session_id,
-            "model": os.getenv("DEFAULT_LLM_MODEL", "qwen/qwen-2.5-72b-instruct"),
+            "model": os.getenv("MODEL_NAME") or os.getenv("DEFAULT_LLM_MODEL", "grok-4-1-fast-reasoning"),
             "messages": messages,
             "tools": tool_schemas if include_tools else None,
             "stats": {
@@ -1089,7 +1091,7 @@ if __name__ == '__main__':
     print(f"{'='*60}\n")
     
     print(f"✅ Agent: {state_manager.get_state('agent:name', 'Not loaded')}")
-    print(f"✅ Model: {os.getenv('DEFAULT_LLM_MODEL', 'qwen/qwen-2.5-72b-instruct')}")
+    print(f"✅ Model: {os.getenv('MODEL_NAME') or os.getenv('DEFAULT_LLM_MODEL', 'grok-4-1-fast-reasoning')}")
     print(f"✅ Memory Blocks: {len(state_manager.list_blocks())}")
     print(f"✅ Archival Memory: {'Enabled' if memory_system else 'Disabled'}")
     
