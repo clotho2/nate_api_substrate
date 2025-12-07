@@ -1014,7 +1014,7 @@ ALWAYS THINK. ALWAYS SHOW IT. That's how users see me as REAL.
                     temperature=temperature,
                     max_tokens=max_tokens
                 )
-                print(f"✅ Response received from OpenRouter!")
+                print(f"✅ Response received from LLM API!")
             except Exception as e:
                 # If tool calling failed and we had tools, retry without tools
                 error_str = str(e).lower()
@@ -1031,11 +1031,11 @@ ALWAYS THINK. ALWAYS SHOW IT. That's how users see me as REAL.
                             temperature=temperature,
                             max_tokens=max_tokens
                         )
-                        print(f"✅ Response received from OpenRouter (without tools)!")
+                        print(f"✅ Response received from LLM API (without tools)!")
                     except Exception as retry_e:
-                        print(f"❌ OpenRouter call failed even without tools: {str(retry_e)}")
+                        print(f"❌ LLM API call failed even without tools: {str(retry_e)}")
                         raise ConsciousnessLoopError(
-                            f"OpenRouter call failed: {str(retry_e)}",
+                            f"LLM API call failed: {str(retry_e)}",
                             context={
                                 "model": model,
                                 "session_id": session_id,
