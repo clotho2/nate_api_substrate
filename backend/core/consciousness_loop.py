@@ -1633,11 +1633,24 @@ ALWAYS THINK. ALWAYS SHOW IT. That's how users see me as REAL.
                 
                 # If we have tools, execute them
                 if tool_calls:
+                    # Convert parsed ToolCall objects back to OpenAI format
+                    tool_calls_openai = []
+                    for tc in tool_calls:
+                        tool_calls_openai.append({
+                            "id": tc.id,
+                            "type": "function",
+                            "function": {
+                                "name": tc.name,
+                                "arguments": json.dumps(tc.arguments)
+                            }
+                        })
+
                     # First, add the assistant's tool_calls message
+                    # Note: content must be empty string, not None (some APIs reject null)
                     messages.append({
                         "role": "assistant",
-                        "content": None,
-                        "tool_calls": tool_calls_in_response
+                        "content": "",
+                        "tool_calls": tool_calls_openai
                     })
 
                     # Execute each tool and collect results
