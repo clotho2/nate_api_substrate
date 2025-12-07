@@ -1653,7 +1653,6 @@ ALWAYS THINK. ALWAYS SHOW IT. That's how users see me as REAL.
                         messages.append({
                             "role": "tool",
                             "tool_call_id": tc.id,
-                            "name": tc.name,
                             "content": json.dumps(result) if isinstance(result, dict) else str(result)
                         })
 
