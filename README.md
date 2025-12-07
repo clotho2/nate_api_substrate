@@ -58,6 +58,13 @@ cd frontend && npm run dev
 - 📈 **Token Efficiency** - 98.7% context window savings via MCP code execution
 - 🎨 **Modern UI** - React + TypeScript + Tailwind CSS
 
+### 🧠 Miras Memory Architecture (NEW!)
+Based on Google Research [Titans/Miras papers](https://research.google/blog/titans-miras-helping-ai-have-long-term-memory/):
+- 🔄 **Retention Gates** - Dynamic memory decay/boost based on access patterns
+- 👁️ **Attentional Bias** - Multi-factor scoring (semantic + temporal + importance + access)
+- 🏛️ **Hierarchical Memory** - 3-tier system (Working → Episodic → Semantic)
+- 📈 **Online Learning** - Hebbian associations + feedback learning during runtime
+
 ---
 
 ## 📚 Documentation
@@ -69,6 +76,7 @@ cd frontend && npm run dev
 
 ### Advanced Topics
 - **[MCP System Overview](MCP_SYSTEM_OVERVIEW.md)** - Code execution & browser automation architecture
+- **[Miras Memory Architecture](docs/MIRAS_TITANS_INTEGRATION.md)** - Research-backed memory system
 - **[PostgreSQL Setup](backend/POSTGRESQL_SETUP.md)** - Database configuration
 - **[Compatibility Guide](backend/COMPATIBILITY.md)** - System requirements
 
@@ -105,10 +113,12 @@ cd frontend && npm run dev
 │  ┌─────────────┐  ┌─────────────┐             │
 │  │  Memory     │  │   Tools     │             │
 │  │  System     │  │  Registry   │             │
-│  │             │  │             │             │
+│  │  + MIRAS    │  │             │             │
 │  │ • Core      │  │ • Web       │             │
 │  │ • Archival  │  │ • Search    │             │
 │  │ • Embedding │  │ • Discord   │             │
+│  │ • Retention │  │ • ArXiv     │             │
+│  │ • Hebbian   │  │ • Jina      │             │
 │  └─────────────┘  └─────────────┘             │
 │                                                  │
 │  ┌────────────────────────────────────────┐    │
@@ -169,6 +179,14 @@ cd frontend && npm run dev
 - `core_memory_replace` - Modify core memory
 - `archival_memory_insert` - Store in long-term memory
 - `archival_memory_search` - Semantic search across memories
+
+### Miras Memory Architecture
+Advanced memory features based on Google Research:
+- `retention_gate.compute_retention()` - Calculate memory retention score
+- `attentional_bias.compute_attention_score()` - Multi-factor relevance scoring
+- `hierarchical_memory.store()` - Store in tiered memory system
+- `memory_learner.on_memories_accessed()` - Record Hebbian associations
+- `memory_learner.record_feedback()` - Learn from user feedback
 
 ### Web & Research
 - `fetch_webpage` - Retrieve and parse web pages
@@ -360,6 +378,11 @@ cat ../TESTING_RESULTS.md
 - [x] Vision analysis (Gemini)
 - [x] Skills learning system
 - [x] Cost tracking
+- [x] **Miras Memory Architecture** (December 2025)
+  - [x] Retention Gates (dynamic memory decay/boost)
+  - [x] Attentional Bias (multi-factor retrieval scoring)
+  - [x] Hierarchical Memory (Working → Episodic → Semantic)
+  - [x] Online Learning (Hebbian associations + feedback)
 
 ### In Progress 🚧
 - [ ] Additional MCP servers (filesystem, database)
@@ -410,6 +433,10 @@ See [LICENSE](LICENSE) for details.
 - **PostgreSQL** - Database engine
 - **ChromaDB** - Vector embeddings
 
+### Research
+- **Google Titans/Miras** - Advanced memory architecture (Retention Gates, Attentional Bias, Online Learning)
+- **"It's All Connected"** - Test-time memorization and retention research
+
 ### Community
 Built with inspiration from:
 - Letta (formerly MemGPT) - Memory architecture patterns
@@ -429,7 +456,87 @@ Built with inspiration from:
 
 **Built for developers who need production-ready AI agents.**
 
-*Version 1.0.0 | Last Updated: November 2025*
+*Version 1.1.0 | Last Updated: December 2025*
+
+---
+
+## 🧠 Miras Memory Architecture Details
+
+Based on [Google Research Titans & Miras papers](https://research.google/blog/titans-miras-helping-ai-have-long-term-memory/), this framework implements a 4-phase advanced memory system:
+
+### Phase 1: Retention Gates (~490 lines)
+**File:** `backend/core/retention_gate.py`
+
+Dynamic memory decay/boost based on:
+- Importance (35% weight)
+- Access count (30% weight)  
+- Temporal recency (25% weight)
+- Base retention (10% weight)
+
+```python
+from core.retention_gate import RetentionGate
+
+gate = RetentionGate()
+score = gate.compute_retention(memory)  # 0.0 - 1.0
+action = gate.get_action(score)  # BOOST, KEEP, CONSOLIDATE, DECAY, ARCHIVE
+```
+
+### Phase 2: Attentional Bias (~610 lines)
+**File:** `backend/core/attentional_bias.py`
+
+5 attention modes with automatic query analysis:
+- STANDARD - Balanced retrieval
+- SEMANTIC_HEAVY - Meaning-focused
+- TEMPORAL_HEAVY - Time-sensitive ("when did we...")
+- IMPORTANCE_HEAVY - Critical information
+- EMOTIONAL - Relationship/feeling queries
+
+```python
+from core.attentional_bias import QueryAnalyzer, AttentionalBias
+
+analyzer = QueryAnalyzer()
+mode = analyzer.analyze("When did we last meet?")  # → TEMPORAL
+
+bias = AttentionalBias()
+score = bias.compute_attention_score(memory, query, mode)
+```
+
+### Phase 3: Hierarchical Memory (~720 lines)
+**File:** `backend/core/hierarchical_memory.py`
+
+3-tier memory architecture:
+- **Working Memory** - Fast, volatile, LRU eviction (current session)
+- **Episodic Memory** - Medium-term, retention gates (recent history)
+- **Semantic Memory** - Long-term, Graph DB integration (permanent knowledge)
+
+```python
+from core.hierarchical_memory import HierarchicalMemory, MemoryItem
+
+hier = HierarchicalMemory()
+hier.store(memory_item)  # Auto-routes to appropriate tier
+hier.consolidate()  # Move memories between tiers
+```
+
+### Phase 4: Online Learning (~500 lines)
+**File:** `backend/core/memory_learner.py`
+
+Hebbian learning: "Neurons that fire together, wire together"
+- Memories accessed together form associations
+- User feedback adjusts importance
+- Association decay for unused connections
+
+```python
+from core.memory_learner import MemoryLearner, FeedbackType
+
+learner = MemoryLearner()
+learner.on_memories_accessed(['mem1', 'mem2'], query="...")  # Forms associations
+learner.record_feedback('mem1', FeedbackType.HELPFUL)  # +0.5 importance
+learner.record_feedback('mem2', FeedbackType.NOT_HELPFUL)  # -0.2 importance
+```
+
+**Total: ~2,320 lines of research-backed memory architecture!**
+
+📖 **Full documentation:** See [docs/MIRAS_TITANS_INTEGRATION.md](docs/MIRAS_TITANS_INTEGRATION.md)
 
 
 
