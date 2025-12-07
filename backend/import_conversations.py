@@ -39,10 +39,12 @@ def detect_format(first_line: Dict) -> str:
     Detect JSONL format from first line.
 
     Returns:
-        Format type: 'messages', 'conversation', 'custom'
+        Format type: 'messages', 'messages_array', 'conversation', 'custom'
     """
-    if 'role' in first_line and 'content' in first_line:
-        return 'messages'  # Message-by-message format
+    if 'messages' in first_line and isinstance(first_line['messages'], list):
+        return 'messages_array'  # Array of messages with role/content
+    elif 'role' in first_line and 'content' in first_line:
+        return 'messages'  # Single message format
     elif 'conversation' in first_line or 'text' in first_line:
         return 'conversation'  # Full conversation format
     else:
@@ -220,7 +222,48 @@ def import_conversations(
                 data = json.loads(line.strip())
 
                 # Extract content based on format
-                if format_type == 'messages':
+                if format_type == 'messages_array':
+                    # Array of messages with role/content (common ChatGPT export format)
+                    messages = data.get('messages', [])
+
+                    # Build conversation text, skipping system messages
+                    conv_parts = []
+                    for msg in messages:
+                        role = msg.get('role', '')
+                        content = msg.get('content', '')
+
+                        # Skip system messages (just the system prompt)
+                        if role == 'system':
+                            continue
+
+                        # Format as "User: ..." or "Assistant: ..."
+                        conv_parts.append(f"{role.capitalize()}: {content}")
+
+                    # Only process if we have actual conversation (not just system prompt)
+                    if conv_parts:
+                        full_text = '\n\n'.join(conv_parts)
+                        chunks = chunk_conversation(full_text)
+
+                        for chunk in chunks:
+                            importance = calculate_importance(chunk, data)
+                            category = categorize_conversation(chunk)
+
+                            memory_system.insert(
+                                content=chunk,
+                                category=category,
+                                importance=importance,
+                                tags=['conversation', 'imported'],
+                                metadata=sanitize_metadata({
+                                    'source': 'import',
+                                    'line': line_num,
+                                    'message_count': len(messages)
+                                })
+                            )
+                            chunk_count += 1
+
+                        imported_count += 1
+
+                elif format_type == 'messages':
                     # Message format: build conversation from messages
                     role = data.get('role', 'unknown')
                     content = data.get('content', '')
