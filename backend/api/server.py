@@ -45,6 +45,7 @@ from api.routes_agents import agents_bp, init_agents_routes
 from api.routes_costs import costs_bp, init_costs_routes
 from api.routes_graph import graph_bp  # 🕸️ Graph RAG!
 from api.routes_discord import discord_bp, init_discord_routes  # 🎮 Discord Bot Integration!
+from api.routes_setup import setup_bp  # 🚀 First-time setup & onboarding!
 
 # 🏴‍☠️ LETTA MAGIC SAUCE!
 from core.postgres_manager import create_postgres_manager_from_env
@@ -267,6 +268,7 @@ app.register_blueprint(agents_bp)
 app.register_blueprint(costs_bp)
 app.register_blueprint(graph_bp)  # 🕸️ Graph RAG!
 app.register_blueprint(postgres_bp)  # 🏴‍☠️ PostgreSQL routes!
+app.register_blueprint(setup_bp)  # 🚀 First-time setup!
 app.register_blueprint(conversation_bp)
 app.register_blueprint(streaming_bp)  # NEW: Streaming endpoint!
 app.register_blueprint(discord_bp)  # 🎮 Discord Bot Integration!

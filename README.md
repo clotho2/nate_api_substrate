@@ -6,31 +6,63 @@ Built on modern LLM infrastructure with OpenRouter support, PostgreSQL persisten
 
 ---
 
-## 🚀 Quick Start
+## 🚀 Quick Start (One-Click Setup!)
 
-Get up and running in 5 minutes:
+### Option 1: Automatic Setup (Recommended)
 
 ```bash
-# 1. Install dependencies
-cd backend && python3 -m venv venv && source venv/bin/activate
+# Clone the repository
+git clone https://github.com/your-username/substrate-ai.git
+cd substrate-ai
+
+# Run the setup wizard - it does EVERYTHING for you!
+python setup.py
+```
+
+The setup script will:
+- ✅ Create Python virtual environment
+- ✅ Install all backend dependencies
+- ✅ Create configuration files
+- ✅ Install frontend dependencies
+- ✅ Validate your setup
+
+**After setup, just add your API key:**
+```bash
+# Edit backend/.env and add your OpenRouter API key
+# Get one at: https://openrouter.ai/keys
+```
+
+### Option 2: Manual Setup
+
+```bash
+# Backend
+cd backend
+python3 -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
-cd ../frontend && npm install
 
-# 2. Configure API key
-cd ../backend
-cp config/.env.example .env
-# Edit .env and add your OpenRouter API key
+# Frontend
+cd ../frontend
+npm install
 
-# 3. Setup ALEX agent (recommended!)
-python setup_alex.py
+# Configure
+cp backend/.env.example backend/.env
+# Edit backend/.env and add OPENROUTER_API_KEY=sk-or-v1-your-key
+```
 
-# 4. Start backend
+### Start the Application
+
+```bash
+# Terminal 1: Backend
+cd backend
+source venv/bin/activate
 python api/server.py
 
-# 5. Start frontend (in new terminal)
-cd frontend && npm run dev
+# Terminal 2: Frontend
+cd frontend
+npm run dev
 
-# 6. Open http://localhost:5173 and chat with ALEX!
+# Open http://localhost:5173 🎉
 ```
 
 📖 **Full guide:** See [QUICK_START.md](QUICK_START.md)
