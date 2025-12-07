@@ -1633,6 +1633,14 @@ ALWAYS THINK. ALWAYS SHOW IT. That's how users see me as REAL.
                 
                 # If we have tools, execute them
                 if tool_calls:
+                    # First, add the assistant's tool_calls message
+                    messages.append({
+                        "role": "assistant",
+                        "content": None,
+                        "tool_calls": tool_calls_in_response
+                    })
+
+                    # Execute each tool and collect results
                     for tc in tool_calls:
                         result = self._execute_tool_call(tc, session_id)
                         all_tool_calls.append({
@@ -1640,15 +1648,24 @@ ALWAYS THINK. ALWAYS SHOW IT. That's how users see me as REAL.
                             "arguments": tc.arguments,
                             "result": result
                         })
+
+                        # Add tool result to messages for next API call
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": tc.id,
+                            "name": tc.name,
+                            "content": json.dumps(result) if isinstance(result, dict) else str(result)
+                        })
+
                         yield {"type": "tool_call", "data": {
                             "name": tc.name,
                             "arguments": tc.arguments,
                             "result": result
                         }}
-                    
-                    # Add tool results to context and continue
-                    # (Simplified - would need full message reconstruction)
-                    break  # For now, break after tools
+
+                    # Continue loop to make another API call with tool results
+                    # This lets the LLM see the results and formulate a response
+                    continue
                 
             except Exception as e:
                 print(f"❌ Streaming error: {e}")
