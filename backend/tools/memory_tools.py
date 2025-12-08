@@ -509,7 +509,7 @@ class MemoryTools:
             }
 
         try:
-            page_size = 5
+            page_size = 15  # Increased from 5 for better results with large memory sets
 
             # Search
             results = self.memory_system.search(
