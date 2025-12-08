@@ -484,18 +484,20 @@ class MemoryTools:
         self,
         query: str,
         page: int = 0,
-        min_importance: int = 5
+        min_importance: int = 5,
+        tags: Optional[List[str]] = None
     ) -> Dict[str, Any]:
         """
         Search archival memory for relevant information.
-        
-        Letta-compatible API.
-        
+
+        Letta-compatible API with tag filtering.
+
         Args:
             query: Search query
             page: Page number (0-based)
             min_importance: Minimum importance filter
-            
+            tags: Optional tag filter (e.g., ['conversation'] or ['founders_archive'])
+
         Returns:
             Result dict with status, query, page, and results
         """
@@ -524,7 +526,8 @@ class MemoryTools:
             results = self.memory.search(
                 query=query,
                 n_results=page_size,
-                min_importance=min_importance
+                min_importance=min_importance,
+                tags=tags
             )
 
             print(f"   Results found: {len(results)}")
@@ -911,7 +914,7 @@ class MemoryTools:
                 "type": "function",
                 "function": {
                     "name": "archival_memory_search",
-                    "description": "Search archival memory for relevant information.",
+                    "description": "Search archival memory for relevant information. Can filter by tags to search specific sources (e.g., documents vs conversations).",
                     "parameters": {
                         "type": "object",
                         "properties": {
@@ -923,6 +926,12 @@ class MemoryTools:
                                 "type": "integer",
                                 "description": "Page number (0-based)",
                                 "default": 0
+                            },
+                            "tags": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "Optional tag filter. Use ['conversation'] for conversation memories, ['founders_archive'] for Founders Archives, or other document tags. Leave empty to search all memories.",
+                                "default": null
                             }
                         },
                         "required": ["query"]
