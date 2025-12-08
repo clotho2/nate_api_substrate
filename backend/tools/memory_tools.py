@@ -33,7 +33,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from core.state_manager import StateManager, StateManagerError
 from core.memory_system import MemorySystem, MemoryCategory, MemorySystemError
 from tools.integration_tools import IntegrationTools
-import tools.memory as memory_module
+from tools.memory import memory as _memory_tool, set_state_manager
 
 
 class MemoryToolError(Exception):
@@ -63,11 +63,14 @@ class MemoryTools:
             cost_tools: Cost tools instance (for budget awareness!)
         """
         self.state = state_manager
-        self.memory = memory_system
+        self.memory_system = memory_system  # Renamed from self.memory to avoid collision with memory() method
         self.cost_tools = cost_tools  # NEW: Cost Tools!
-        
+
         # Initialize integration tools (Discord, Spotify, etc.)
         self.integrations = IntegrationTools()
+
+        # Set state manager for memory tool (so it can create/edit blocks)
+        set_state_manager(state_manager)
         
         print("✅ Memory Tools initialized")
         print("✅ Integration Tools initialized (Discord, Spotify)")
@@ -447,21 +450,21 @@ class MemoryTools:
         Returns:
             Result dict with status and message
         """
-        if not self.memory:
+        if not self.memory_system:
             return {
                 "status": "error",
                 "message": "Archival memory system not initialized"
             }
-        
+
         try:
             # Parse category
             try:
                 cat = MemoryCategory(category)
             except ValueError:
                 cat = MemoryCategory.FACT
-            
+
             # Insert
-            memory_id = self.memory.insert(
+            memory_id = self.memory_system.insert(
                 content=content,
                 category=cat,
                 importance=importance,
@@ -501,29 +504,17 @@ class MemoryTools:
         Returns:
             Result dict with status, query, page, and results
         """
-        if not self.memory:
-            print(f"⚠️  archival_memory_search: self.memory is None!")
+        if not self.memory_system:
             return {
                 "status": "error",
                 "message": "Archival memory system not initialized"
             }
 
         try:
-            page_size = 15  # Increased from 5 for 6,700+ memories
-
-            # DEBUG logging
-            print(f"🔍 archival_memory_search DEBUG:")
-            print(f"   Query: '{query}'")
-            print(f"   Min importance: {min_importance}")
-            print(f"   Memory system: {type(self.memory).__name__}")
-            print(f"   ChromaDB path: {self.memory.chromadb_path}")
-
-            # Check total memories in database
-            stats = self.memory.get_stats()
-            print(f"   Total memories in DB: {stats.get('total_memories', 0)}")
+            page_size = 15  # Increased from 5 for better results with large memory sets
 
             # Search
-            results = self.memory.search(
+            results = self.memory_system.search(
                 query=query,
                 n_results=page_size,
                 min_importance=min_importance,

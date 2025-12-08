@@ -95,7 +95,7 @@ class ConsciousnessLoop:
         self.llm_client = openrouter_client  # Can be GrokClient or OpenRouterClient
         self.openrouter = openrouter_client  # Legacy compatibility
         self.tools = memory_tools
-        self.memory = memory_tools.memory  # Access to memory system for stats
+        self.memory = memory_tools.memory_system  # Access to memory system for stats (renamed from .memory to .memory_system)
         self.max_tool_calls_per_turn = max_tool_calls_per_turn
         self.default_model = default_model
         self.message_manager = message_manager  # 🏴‍☠️ PostgreSQL!
