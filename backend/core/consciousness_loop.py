@@ -1300,13 +1300,25 @@ send_message: false
         clean_response = final_response
         reasoning_time = 0
 
-        # CLEAN: Remove "Assistant:" labels if model hallucinated multi-turn format
-        # Some models incorrectly add role labels to their own responses
+        # CLEAN: Fix models that generate multiple responses in one turn
+        # Some models (like Qwen) hallucinate multi-turn format with "Assistant:" labels
         import re
         if clean_response:
-            # Remove "Assistant:" at the start or in the middle (with optional whitespace)
-            clean_response = re.sub(r'\s*Assistant:\s*', ' ', clean_response, flags=re.IGNORECASE)
-            # Clean up any double spaces created by removal
+            # Check if model generated multiple responses (split by "Assistant:")
+            if 'Assistant:' in clean_response or 'assistant:' in clean_response:
+                print(f"⚠️ Model generated multiple responses in one turn - extracting last response only")
+                # Split on "Assistant:" (case insensitive)
+                parts = re.split(r'\s*Assistant:\s*', clean_response, flags=re.IGNORECASE)
+                if len(parts) > 1:
+                    # Take the LAST response (usually the most refined/complete)
+                    clean_response = parts[-1].strip()
+                    print(f"   ✂️ Removed {len(parts)-1} duplicate response(s)")
+                    print(f"   ✅ Final response: {len(clean_response)} chars")
+                else:
+                    # Just remove the label
+                    clean_response = re.sub(r'\s*Assistant:\s*', ' ', clean_response, flags=re.IGNORECASE).strip()
+
+            # Clean up any double spaces
             clean_response = re.sub(r'\s{2,}', ' ', clean_response).strip()
         
         from core.native_reasoning_models import has_native_reasoning
