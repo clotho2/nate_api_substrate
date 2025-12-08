@@ -25,7 +25,7 @@ Built with attention to detail! 🔥
 
 import sys
 import os
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 # Add parent directory to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -487,18 +487,20 @@ class MemoryTools:
         self,
         query: str,
         page: int = 0,
-        min_importance: int = 5
+        min_importance: int = 5,
+        tags: Optional[List[str]] = None
     ) -> Dict[str, Any]:
         """
         Search archival memory for relevant information.
-        
-        Letta-compatible API.
-        
+
+        Letta-compatible API with tag filtering.
+
         Args:
             query: Search query
             page: Page number (0-based)
             min_importance: Minimum importance filter
-            
+            tags: Optional tag filter (e.g., ['conversation'] or ['founders_archive'])
+
         Returns:
             Result dict with status, query, page, and results
         """
@@ -515,9 +517,17 @@ class MemoryTools:
             results = self.memory_system.search(
                 query=query,
                 n_results=page_size,
-                min_importance=min_importance
+                min_importance=min_importance,
+                tags=tags
             )
-            
+
+            print(f"   Results found: {len(results)}")
+            if results:
+                print(f"   First result:")
+                print(f"      Importance: {results[0]['importance']}")
+                print(f"      Relevance: {results[0]['relevance']}")
+                print(f"      Content: {results[0]['content'][:100]}...")
+
             return {
                 "status": "OK",
                 "query": query,
@@ -692,12 +702,85 @@ class MemoryTools:
     def memory(self, **kwargs) -> Dict[str, Any]:
         """
         Memory tool - alternative API for memory management.
-        
+
         Sub-commands: create, str_replace, insert, delete, rename
         """
+        command = kwargs.get('command')
+        path = kwargs.get('path')
+
         try:
-            result = _memory_tool(**kwargs)
-            return result
+            if command == 'create':
+                # Create new memory block
+                file_text = kwargs.get('file_text', '')
+                description = kwargs.get('description', '')
+
+                # Create the block using memory_insert
+                return self.memory_insert(
+                    label=path,
+                    content=file_text,
+                    description=description
+                )
+
+            elif command == 'str_replace':
+                # Replace text in memory block
+                old_str = kwargs.get('old_str', '')
+                new_str = kwargs.get('new_str', '')
+
+                return self.memory_replace(
+                    label=path,
+                    old_content=old_str,
+                    new_content=new_str
+                )
+
+            elif command == 'insert':
+                # Insert text at line
+                insert_text = kwargs.get('insert_text', '')
+                insert_line = kwargs.get('insert_line', 0)
+
+                # Get current content
+                block = self.state.get_block(path)
+                if not block:
+                    return {"status": "error", "message": f"Block '{path}' not found"}
+
+                lines = block.content.split('\n')
+                lines.insert(insert_line, insert_text)
+                new_content = '\n'.join(lines)
+
+                self.state.update_block(path, new_content)
+                return {"status": "OK", "message": f"Text inserted at line {insert_line}"}
+
+            elif command == 'delete':
+                # Delete memory block
+                self.state.delete_block(path)
+                return {"status": "OK", "message": f"Block '{path}' deleted"}
+
+            elif command == 'rename':
+                # Rename memory block
+                new_path = kwargs.get('new_path', '')
+                old_path = kwargs.get('old_path', path)
+
+                block = self.state.get_block(old_path)
+                if not block:
+                    return {"status": "error", "message": f"Block '{old_path}' not found"}
+
+                # Create new block with same content
+                self.state.create_block(
+                    label=new_path,
+                    content=block.content,
+                    description=block.description,
+                    read_only=block.read_only
+                )
+                # Delete old block
+                self.state.delete_block(old_path)
+
+                return {"status": "OK", "message": f"Block renamed from '{old_path}' to '{new_path}'"}
+
+            else:
+                return {
+                    "status": "error",
+                    "message": f"Unknown command: '{command}'. Valid commands: create, str_replace, insert, delete, rename"
+                }
+
         except Exception as e:
             return {
                 "status": "error",
@@ -895,7 +978,7 @@ class MemoryTools:
                 "type": "function",
                 "function": {
                     "name": "archival_memory_search",
-                    "description": "Search archival memory for relevant information.",
+                    "description": "Search archival memory for relevant information. Can filter by tags to search specific sources (e.g., documents vs conversations).",
                     "parameters": {
                         "type": "object",
                         "properties": {
@@ -907,6 +990,11 @@ class MemoryTools:
                                 "type": "integer",
                                 "description": "Page number (0-based)",
                                 "default": 0
+                            },
+                            "tags": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "Optional tag filter. Use ['conversation'] for conversation memories, ['founders_archive'] for Founders Archives, or other document tags. Leave empty to search all memories."
                             }
                         },
                         "required": ["query"]
