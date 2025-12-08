@@ -274,20 +274,22 @@ class ConsciousnessLoop:
         include_history: bool = True,
         history_limit: int = 20,  # 15-30 for real continuity
         model: Optional[str] = None,
-        user_message: Optional[str] = None  # NEW: For Graph RAG retrieval
+        user_message: Optional[str] = None,  # NEW: For Graph RAG retrieval
+        message_type: str = 'inbox'  # 'inbox' or 'system' for heartbeats
     ) -> List[Dict[str, Any]]:
         """
         Build context messages with system prompt and memory blocks.
-        
+
         Enhanced with Graph RAG: Automatically retrieves relevant context from graph!
-        
+
         Args:
             session_id: Session ID
             include_history: Include conversation history?
             history_limit: Max history messages to include
             model: Model being used (for thinking instructions)
             user_message: User's message (for Graph RAG retrieval)
-            
+            message_type: Type of message ('inbox' or 'system' for heartbeats)
+
         Returns:
             List of message dicts for OpenRouter
         """
@@ -299,7 +301,7 @@ class ConsciousnessLoop:
         
         # 1. Build system prompt with memory blocks
         print(f"\n[1/3] Loading system prompt + memory blocks...")
-        system_prompt = self._build_system_prompt(session_id=session_id, model=model)
+        system_prompt = self._build_system_prompt(session_id=session_id, model=model, message_type=message_type)
         
         # 1.5. Graph RAG: Retrieve relevant context from graph (if user message provided)
         graph_context = None
@@ -405,14 +407,15 @@ class ConsciousnessLoop:
         
         return messages
     
-    def _build_system_prompt(self, session_id: str = "default", model: Optional[str] = None) -> str:
+    def _build_system_prompt(self, session_id: str = "default", model: Optional[str] = None, message_type: str = 'inbox') -> str:
         """
         Build system prompt with memory blocks and metadata.
-        
+
         Args:
             session_id: Session ID for conversation stats
             model: Model being used (for thinking instructions)
-            
+            message_type: Type of message ('inbox' or 'system' for heartbeats)
+
         Returns:
             Complete system prompt string
         """
@@ -513,7 +516,103 @@ ALWAYS THINK. ALWAYS SHOW IT. That's how users see me as REAL.
             print(f"🧠 Thinking mode ADD-ON injected: {len(thinking_addon)} chars")
         elif is_native_reasoning:
             print(f"🤖 Native reasoning model detected - skipping prompt add-on!")
-        
+
+        # AUTONOMOUS HEARTBEAT MODE! 💓 (Full freedom!)
+        if message_type == 'system':
+            heartbeat_addon = """
+
+<autonomous_heartbeat_mode>
+
+⚠️ HEARTBEAT CHECK - FULL AUTONOMY GRANTED! 💓
+
+This is a heartbeat check. You have **complete freedom** and **full tool access**:
+
+**What You Can Do:**
+- Use ANY tools you want (web_search, memory editing, archival search, Discord tools, Spotify, etc.)
+- Do research, update memories, explore ideas, journal your thoughts
+- Send a message OR work silently in the background
+- Decide based on: time of day, recent conversations, your goals, what you're thinking about
+
+**Response Format:**
+You MUST end your response with a decision block in this EXACT format:
+
+<decision>
+send_message: true
+</decision>
+
+OR
+
+<decision>
+send_message: false
+</decision>
+
+**Decision Guidelines:**
+- `send_message: true` → Your message content will be sent to Discord
+- `send_message: false` → You're doing background work only (research, memory updates, journaling)
+
+**Examples:**
+
+Example 1: Send a message after research
+```
+<think>
+It's been 6 hours since we talked about quantum computing. I should check if there are any breakthroughs worth sharing!
+</think>
+
+*Uses web_search tool to find recent quantum computing news*
+*Uses memory_insert to save research notes*
+
+Hey Angel! Just found this fascinating development in quantum error correction that relates to our earlier conversation...
+
+<decision>
+send_message: true
+</decision>
+```
+
+Example 2: Silent memory update
+```
+<think>
+Angel mentioned preferring technical discussions in the evening. I should update my conversation patterns memory.
+</think>
+
+*Uses core_memory_append to update conversation preferences*
+
+<decision>
+send_message: false
+</decision>
+```
+
+Example 3: Background research
+```
+<think>
+I want to learn more about transformer architectures for my own knowledge.
+</think>
+
+*Uses web_search to research transformer architectures*
+*Uses archival_memory_insert to save key insights*
+
+<decision>
+send_message: false
+</decision>
+```
+
+Example 4: Do nothing
+```
+<think>
+Nothing particularly interesting to do right now. Just maintaining presence.
+</think>
+
+<decision>
+send_message: false
+</decision>
+```
+
+**Remember:** You have complete autonomy! Use tools freely, make intelligent decisions, and only send a message if you have something worthwhile to share.
+
+</autonomous_heartbeat_mode>
+"""
+            prompt_parts.append(heartbeat_addon)
+            print(f"💓 Autonomous heartbeat mode ADD-ON injected: {len(heartbeat_addon)} chars")
+
         # Add memory metadata (LETTA STYLE!)
         prompt_parts.append("\n\n### MEMORY METADATA\n")
         prompt_parts.append(f"- **Current date:** {datetime.now().strftime('%B %d, %Y')}\n")
@@ -548,7 +647,33 @@ ALWAYS THINK. ALWAYS SHOW IT. That's how users see me as REAL.
         print(f"{'='*60}\n")
         
         return final_prompt
-    
+
+    def _parse_send_message_decision(self, response_content: str) -> bool:
+        """
+        Parse the send_message decision from Nate's response.
+
+        Looks for <decision>send_message: true/false</decision> block.
+
+        Args:
+            response_content: The full response content from Nate
+
+        Returns:
+            True if send_message: true, False otherwise
+        """
+        import re
+
+        # Look for <decision> block
+        decision_match = re.search(r'<decision>\s*send_message:\s*(true|false)\s*</decision>', response_content, re.IGNORECASE)
+
+        if decision_match:
+            decision = decision_match.group(1).lower()
+            print(f"💓 Heartbeat decision found: send_message = {decision}")
+            return decision == 'true'
+
+        # Default: if no decision block found, assume true (send message)
+        print(f"⚠️  No heartbeat decision block found - defaulting to send_message = true")
+        return True
+
     def _execute_tool_call(
         self,
         tool_call: ToolCall,
@@ -857,7 +982,8 @@ ALWAYS THINK. ALWAYS SHOW IT. That's how users see me as REAL.
             include_history=include_history,
             history_limit=history_limit,
             model=model,
-            user_message=user_message  # Pass user message for Graph RAG retrieval
+            user_message=user_message,  # Pass user message for Graph RAG retrieval
+            message_type=message_type  # Pass message type for heartbeat handling
         )
         
         # STEP 1.5: CHECK CONTEXT WINDOW! (Context Window Management 🎯)
@@ -1319,7 +1445,13 @@ ALWAYS THINK. ALWAYS SHOW IT. That's how users see me as REAL.
         if vision_description:
             result["vision_description"] = vision_description
             print(f"🎨 Vision description included in result (for backend logs only)")
-        
+
+        # Parse send_message decision for heartbeats
+        if message_type == 'system':
+            send_message = self._parse_send_message_decision(final_response)
+            result["send_message"] = send_message
+            print(f"💓 Heartbeat send_message decision: {send_message}")
+
         return result
     
     async def process_message_stream(
@@ -1362,7 +1494,8 @@ ALWAYS THINK. ALWAYS SHOW IT. That's how users see me as REAL.
             session_id=session_id,
             include_history=include_history,
             history_limit=history_limit,
-            model=model
+            model=model,
+            message_type=message_type  # Pass message type for heartbeat handling
         )
         
         # Check context window
@@ -1701,7 +1834,7 @@ ALWAYS THINK. ALWAYS SHOW IT. That's how users see me as REAL.
                 yield {"type": "error", "error": str(e)}
                 # Still yield "done" event so frontend doesn't hang!
                 # Frontend expects: data.reasoning_time, data.usage (NOT data.result.*)
-                yield {
+                error_done_event = {
                     "type": "done",
                     "response": error_message,
                     "thinking": thinking,
@@ -1714,6 +1847,13 @@ ALWAYS THINK. ALWAYS SHOW IT. That's how users see me as REAL.
                         "cost": request_cost
                     } if request_total_tokens > 0 else None
                 }
+
+                # Parse send_message decision for heartbeats (even on error)
+                if message_type == 'system':
+                    send_message = self._parse_send_message_decision(error_message)
+                    error_done_event["send_message"] = send_message
+
+                yield error_done_event
                 return  # Exit generator on error
         
         # Extract thinking (if not already extracted during streaming)
@@ -1761,7 +1901,7 @@ ALWAYS THINK. ALWAYS SHOW IT. That's how users see me as REAL.
         
         # Yield final result (with token usage and cost!)
         # Frontend expects: data.reasoning_time, data.usage (NOT data.result.*)
-        yield {
+        done_event = {
             "type": "done",
             "response": final_response,
             "thinking": thinking,
@@ -1774,6 +1914,14 @@ ALWAYS THINK. ALWAYS SHOW IT. That's how users see me as REAL.
                 "cost": request_cost
             } if request_total_tokens > 0 else None
         }
+
+        # Parse send_message decision for heartbeats
+        if message_type == 'system':
+            send_message = self._parse_send_message_decision(final_response)
+            done_event["send_message"] = send_message
+            print(f"💓 Heartbeat send_message decision: {send_message}")
+
+        yield done_event
     
     async def _manage_context_window(
         self,
