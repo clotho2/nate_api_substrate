@@ -96,7 +96,7 @@ def memory(
                 content=file_text,
                 block_type=BlockType.CUSTOM,
                 description=description or f"Memory block: {path}",
-                limit=2000,
+                limit=5000,  # Increased from 2000 to give more room for detailed memories
                 read_only=False
             )
 
