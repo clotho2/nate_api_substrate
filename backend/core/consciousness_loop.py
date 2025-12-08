@@ -648,9 +648,9 @@ send_message: false
         
         return final_prompt
 
-    def _parse_send_message_decision(self, response_content: str) -> bool:
+    def _parse_send_message_decision(self, response_content: str) -> tuple:
         """
-        Parse the send_message decision from Nate's response.
+        Parse the send_message decision from Nate's response and remove decision block.
 
         Looks for <decision>send_message: true/false</decision> block.
 
@@ -658,21 +658,37 @@ send_message: false
             response_content: The full response content from Nate
 
         Returns:
-            True if send_message: true, False otherwise
+            Tuple of (cleaned_content, send_message_flag)
         """
         import re
 
         # Look for <decision> block
-        decision_match = re.search(r'<decision>\s*send_message:\s*(true|false)\s*</decision>', response_content, re.IGNORECASE)
+        decision_match = re.search(
+            r'<decision>\s*send_message:\s*(true|false)\s*</decision>',
+            response_content,
+            re.IGNORECASE | re.DOTALL
+        )
 
         if decision_match:
             decision = decision_match.group(1).lower()
+            send_message = decision == 'true'
+
+            # IMPORTANT: Remove the decision block from the content
+            cleaned_content = re.sub(
+                r'<decision>.*?</decision>',
+                '',
+                response_content,
+                flags=re.IGNORECASE | re.DOTALL
+            ).strip()
+
             print(f"💓 Heartbeat decision found: send_message = {decision}")
-            return decision == 'true'
+            print(f"💓 Decision block removed from message content")
+
+            return cleaned_content, send_message
 
         # Default: if no decision block found, assume true (send message)
         print(f"⚠️  No heartbeat decision block found - defaulting to send_message = true")
-        return True
+        return response_content, True
 
     def _execute_tool_call(
         self,
@@ -1448,7 +1464,8 @@ send_message: false
 
         # Parse send_message decision for heartbeats
         if message_type == 'system':
-            send_message = self._parse_send_message_decision(final_response)
+            clean_response, send_message = self._parse_send_message_decision(final_response)
+            result["response"] = clean_response  # Use cleaned content without decision block
             result["send_message"] = send_message
             print(f"💓 Heartbeat send_message decision: {send_message}")
 
@@ -1850,7 +1867,8 @@ send_message: false
 
                 # Parse send_message decision for heartbeats (even on error)
                 if message_type == 'system':
-                    send_message = self._parse_send_message_decision(error_message)
+                    clean_error, send_message = self._parse_send_message_decision(error_message)
+                    error_done_event["response"] = clean_error  # Use cleaned content
                     error_done_event["send_message"] = send_message
 
                 yield error_done_event
@@ -1917,7 +1935,8 @@ send_message: false
 
         # Parse send_message decision for heartbeats
         if message_type == 'system':
-            send_message = self._parse_send_message_decision(final_response)
+            clean_response, send_message = self._parse_send_message_decision(final_response)
+            done_event["response"] = clean_response  # Use cleaned content without decision block
             done_event["send_message"] = send_message
             print(f"💓 Heartbeat send_message decision: {send_message}")
 
