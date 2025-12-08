@@ -930,8 +930,7 @@ class MemoryTools:
                             "tags": {
                                 "type": "array",
                                 "items": {"type": "string"},
-                                "description": "Optional tag filter. Use ['conversation'] for conversation memories, ['founders_archive'] for Founders Archives, or other document tags. Leave empty to search all memories.",
-                                "default": null
+                                "description": "Optional tag filter. Use ['conversation'] for conversation memories, ['founders_archive'] for Founders Archives, or other document tags. Leave empty to search all memories."
                             }
                         },
                         "required": ["query"]
