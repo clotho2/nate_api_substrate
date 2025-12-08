@@ -33,7 +33,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from core.state_manager import StateManager, StateManagerError
 from core.memory_system import MemorySystem, MemoryCategory, MemorySystemError
 from tools.integration_tools import IntegrationTools
-from tools.memory import memory as _memory_tool
+from tools.memory import memory as _memory_tool, set_state_manager
 
 
 class MemoryToolError(Exception):
@@ -65,9 +65,12 @@ class MemoryTools:
         self.state = state_manager
         self.memory_system = memory_system  # Renamed from self.memory to avoid collision with memory() method
         self.cost_tools = cost_tools  # NEW: Cost Tools!
-        
+
         # Initialize integration tools (Discord, Spotify, etc.)
         self.integrations = IntegrationTools()
+
+        # Set state manager for memory tool (so it can create/edit blocks)
+        set_state_manager(state_manager)
         
         print("✅ Memory Tools initialized")
         print("✅ Integration Tools initialized (Discord, Spotify)")
