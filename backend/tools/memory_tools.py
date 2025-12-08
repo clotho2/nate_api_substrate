@@ -63,7 +63,7 @@ class MemoryTools:
             cost_tools: Cost tools instance (for budget awareness!)
         """
         self.state = state_manager
-        self.memory = memory_system
+        self.memory_system = memory_system  # Renamed from self.memory to avoid collision with memory() method
         self.cost_tools = cost_tools  # NEW: Cost Tools!
         
         # Initialize integration tools (Discord, Spotify, etc.)
@@ -447,21 +447,21 @@ class MemoryTools:
         Returns:
             Result dict with status and message
         """
-        if not self.memory:
+        if not self.memory_system:
             return {
                 "status": "error",
                 "message": "Archival memory system not initialized"
             }
-        
+
         try:
             # Parse category
             try:
                 cat = MemoryCategory(category)
             except ValueError:
                 cat = MemoryCategory.FACT
-            
+
             # Insert
-            memory_id = self.memory.insert(
+            memory_id = self.memory_system.insert(
                 content=content,
                 category=cat,
                 importance=importance,
@@ -499,17 +499,17 @@ class MemoryTools:
         Returns:
             Result dict with status, query, page, and results
         """
-        if not self.memory:
+        if not self.memory_system:
             return {
                 "status": "error",
                 "message": "Archival memory system not initialized"
             }
-        
+
         try:
             page_size = 5
-            
+
             # Search
-            results = self.memory.search(
+            results = self.memory_system.search(
                 query=query,
                 n_results=page_size,
                 min_importance=min_importance
