@@ -270,23 +270,23 @@ message = (GrokMultimodalMessage(role="user")
 import os
 import requests
 
-def call_grok_api(messages, model="grok-4-1-fast-reasoning"):
+def call_grok_api(messages, model=None):
     """Call Grok API with multimodal support"""
 
     headers = {
-        "Authorization": f"Bearer {os.getenv('XAI_API_KEY')}",
+        "Authorization": f"Bearer {os.getenv('GROK_API_KEY')}",
         "Content-Type": "application/json"
     }
 
     payload = {
-        "model": model,
+        "model": model or os.getenv('MODEL_NAME', 'grok-4-1-fast-reasoning'),
         "messages": messages,
         "temperature": 0.7,
         "stream": False
     }
 
     response = requests.post(
-        "https://api.x.ai/v1/chat/completions",
+        os.getenv('GROK_API_URL', 'https://api.x.ai/v1/chat/completions'),
         headers=headers,
         json=payload,
         timeout=120
@@ -301,12 +301,13 @@ def call_grok_api(messages, model="grok-4-1-fast-reasoning"):
 
 ### Environment Configuration
 
-Add to your `backend/.env`:
+Your existing `backend/.env` already has the right variables:
 
 ```bash
-# xAI API Configuration
-XAI_API_KEY=your_xai_api_key_here
-GROK_MODEL=grok-4-1-fast-reasoning
+# xAI Grok Configuration (Primary API)
+GROK_API_KEY=your_grok_api_key_here
+GROK_API_URL=https://api.x.ai/v1/chat/completions
+MODEL_NAME=grok-4-1-fast-reasoning
 ```
 
 Get your API key from: https://console.x.ai/
