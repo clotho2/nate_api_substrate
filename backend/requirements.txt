@@ -58,6 +58,7 @@ neo4j==5.14.1               # Neo4j Graph DB (for Graph RAG)
 # Uncomment if you want to use these features:
 # discord.py==2.3.2         # For Discord tool
 # spotipy==2.23.0           # For Spotify control
+python-telegram-bot==20.7   # For Telegram bot integration
 
 # ============================================
 # DEVELOPMENT (Optional)
