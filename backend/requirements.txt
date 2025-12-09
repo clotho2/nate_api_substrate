@@ -31,6 +31,7 @@ mcp==0.1.0                  # MCP client for tool servers
 # Uncomment if you want to use these features:
 # discord.py==2.3.2         # For Discord tool
 # spotipy==2.23.0           # For Spotify control
+python-telegram-bot==20.7   # For Telegram bot integration
 
 # Database Utilities
 psycopg2-binary==2.9.9      # PostgreSQL support (optional)
