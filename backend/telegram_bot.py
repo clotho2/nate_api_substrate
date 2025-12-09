@@ -200,18 +200,27 @@ Status: ✅ Connected to substrate
             # Get caption (if any)
             caption = update.message.caption or "What's in this image?"
 
-            # Prepare multimodal request
-            # NOTE: This format might need adjustment based on Grok API docs
+            # Prepare multimodal request in Grok's format
+            # Grok expects content as a list with type: "text" and type: "image_url"
             response = requests.post(
                 f"{self.substrate_url}/api/chat",
                 json={
-                    "message": caption,
                     "session_id": self.session_id,
                     "stream": False,
-                    "image": {
-                        "data": image_base64,
-                        "mime_type": "image/jpeg"  # Telegram converts to JPEG
-                    }
+                    "multimodal": True,  # Flag for substrate to use multimodal format
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": caption
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{image_base64}",
+                                "detail": "high"  # high/low/auto - use high for detailed analysis
+                            }
+                        }
+                    ]
                 },
                 timeout=120
             )

@@ -142,69 +142,174 @@ Response → Telegram (auto-chunked if > 4,096 chars)
 
 ## Multimodal Integration with Grok
 
-The bot automatically handles images and documents by:
+The bot automatically handles images using **Grok 4.1 Fast Reasoning's** multimodal API format:
 
-1. **Downloading** the file from Telegram
-2. **Encoding** as base64
-3. **Sending** to your substrate API with multimodal payload:
+### Image Processing Flow
+
+1. **Telegram** → Bot downloads image
+2. **Encoding** → Converts to base64
+3. **Formatting** → Structures in Grok's multimodal format
+4. **API Call** → Sends to your substrate API:
 
 ```python
 {
-    "message": "What's in this image?",
     "session_id": "telegram_session",
-    "image": {
-        "data": "base64_encoded_image",
-        "mime_type": "image/jpeg"
-    }
+    "stream": False,
+    "multimodal": True,
+    "content": [
+        {
+            "type": "text",
+            "text": "What's in this image?"
+        },
+        {
+            "type": "image_url",
+            "image_url": {
+                "url": "data:image/jpeg;base64,<base64_encoded_image>",
+                "detail": "high"  # high/low/auto
+            }
+        }
+    ]
 }
 ```
 
-Your substrate API needs to forward this to Grok's multimodal API.
+### Grok Multimodal Specs
+
+- **Model**: `grok-4-1-fast-reasoning` or `grok-4`
+- **Max image size**: 20 MB
+- **Supported formats**: JPG, JPEG, PNG
+- **Detail levels**:
+  - `high`: Most detailed, ~1,792 tokens max per image
+  - `low`: Faster, fewer tokens
+  - `auto`: System decides
+- **Token usage**: (# of tiles + 1) × 256 tokens
+  - Images broken into 448×448 pixel tiles
+  - Maximum 6 tiles per image
+
+Your substrate API needs to forward this to Grok's multimodal API endpoint.
 
 ---
 
 ## Updating Your Substrate API for Multimodal
 
-You'll need to modify your API endpoint to handle images:
+I've created a helper module: `backend/core/grok_multimodal.py` that handles all the formatting.
+
+### Option 1: Update Your API Endpoint
 
 ```python
-# In api/server.py or consciousness_loop.py
+# In api/server.py
+
+from core.grok_multimodal import create_multimodal_message, create_text_message
 
 @app.route("/api/chat", methods=["POST"])
 def chat():
     data = request.json
-    message = data.get("message")
     session_id = data.get("session_id")
 
-    # NEW: Handle image data
-    image_data = data.get("image")
-    attachment_data = data.get("attachment")
+    # Check if it's a multimodal request
+    if data.get("multimodal"):
+        # Content is already in Grok format from Telegram bot
+        content = data.get("content")
 
-    # Build messages for Grok API
-    if image_data:
-        # Format for Grok multimodal API
-        messages = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": message},
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:{image_data['mime_type']};base64,{image_data['data']}"
-                        }
-                    }
-                ]
-            }
-        ]
+        # Build message for Grok
+        message = {
+            "role": "user",
+            "content": content
+        }
     else:
-        # Text-only
-        messages = [{"role": "user", "content": message}]
+        # Regular text message
+        message = {
+            "role": "user",
+            "content": data.get("message")
+        }
 
-    # Send to Grok API...
+    # Add to conversation history
+    conversation = get_conversation_history(session_id)
+    conversation.append(message)
+
+    # Call Grok API
+    response = call_grok_api(
+        model="grok-4-1-fast-reasoning",
+        messages=conversation
+    )
+
+    return jsonify({"response": response})
 ```
 
-**📧 Share your Grok API docs and I'll help you integrate this properly!**
+### Option 2: Use the Helper Module
+
+```python
+# In your consciousness loop or API handler
+
+from core.grok_multimodal import (
+    create_multimodal_message,
+    create_text_message,
+    GrokMultimodalMessage
+)
+
+# For images from Telegram
+if telegram_data.get("multimodal"):
+    user_message = {
+        "role": "user",
+        "content": telegram_data["content"]  # Already formatted!
+    }
+
+# For building messages programmatically
+else:
+    user_message = create_text_message(user_input)
+
+# Or use the builder pattern
+message = (GrokMultimodalMessage(role="user")
+           .add_text("Analyze this image:")
+           .add_image_base64(base64_data, "image/jpeg", "high")
+           .to_dict())
+```
+
+### Complete Example with Grok API
+
+```python
+import os
+import requests
+
+def call_grok_api(messages, model="grok-4-1-fast-reasoning"):
+    """Call Grok API with multimodal support"""
+
+    headers = {
+        "Authorization": f"Bearer {os.getenv('XAI_API_KEY')}",
+        "Content-Type": "application/json"
+    }
+
+    payload = {
+        "model": model,
+        "messages": messages,
+        "temperature": 0.7,
+        "stream": False
+    }
+
+    response = requests.post(
+        "https://api.x.ai/v1/chat/completions",
+        headers=headers,
+        json=payload,
+        timeout=120
+    )
+
+    if response.status_code == 200:
+        result = response.json()
+        return result["choices"][0]["message"]["content"]
+    else:
+        raise Exception(f"Grok API error: {response.status_code} - {response.text}")
+```
+
+### Environment Configuration
+
+Add to your `backend/.env`:
+
+```bash
+# xAI API Configuration
+XAI_API_KEY=your_xai_api_key_here
+GROK_MODEL=grok-4-1-fast-reasoning
+```
+
+Get your API key from: https://console.x.ai/
 
 ---
 
