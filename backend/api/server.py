@@ -155,18 +155,34 @@ if grok_api_key and not use_ollama:
         logger.info("   Falling back to next available option...")
 
 elif use_ollama:
-    # Local Ollama - FREE and private!
+    # Ollama - Cloud or Local
     try:
-        logger.info("🆓 Initializing Local Ollama Client...")
+        ollama_api_url = os.getenv("OLLAMA_API_URL", "http://localhost:11434/api")
+        ollama_api_key = os.getenv("OLLAMA_CLOUD_API_KEY", "")
+        is_cloud = 'ollama.com' in ollama_api_url.lower()
+
+        if is_cloud:
+            logger.info("☁️  Initializing Ollama Cloud Client...")
+        else:
+            logger.info("🆓 Initializing Local Ollama Client...")
+
         openrouter_client = OllamaClient(
-            base_url=os.getenv("OLLAMA_API_URL", "http://localhost:11434"),
+            base_url=ollama_api_url,
             default_model=os.getenv("OLLAMA_MODEL", "llama3.1:8b"),
+            api_key=ollama_api_key if is_cloud else None,
             cost_tracker=cost_tracker
         )
-        logger.info("✅ Ollama Client initialized - Running locally for FREE!")
+
+        if is_cloud:
+            logger.info("✅ Ollama Cloud Client initialized - Cloud-hosted models!")
+        else:
+            logger.info("✅ Ollama Local Client initialized - Running locally for FREE!")
     except Exception as e:
         logger.warning(f"⚠️  Ollama client init failed: {e}")
-        logger.info("   Make sure Ollama is running: ollama serve")
+        if 'ollama.com' in os.getenv("OLLAMA_API_URL", "").lower():
+            logger.info("   Check your OLLAMA_CLOUD_API_KEY")
+        else:
+            logger.info("   Make sure Ollama is running: ollama serve")
         logger.info("   Falling back to next available option...")
 
 elif openrouter_api_key and openrouter_api_key.startswith("sk-or-v1-"):

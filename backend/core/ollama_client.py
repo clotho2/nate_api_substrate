@@ -81,19 +81,26 @@ class OllamaClient:
 
     def __init__(
         self,
-        base_url: str = "http://localhost:11434",
+        base_url: str = "http://localhost:11434/api",
         default_model: str = "llama3.1:8b",
+        api_key: Optional[str] = None,
         app_name: str = "NateSubstrate",
         app_url: Optional[str] = None,
         timeout: int = 120,
         cost_tracker = None
     ):
         """
-        Initialize Ollama client.
+        Initialize Ollama client (supports both local and cloud).
 
         Args:
-            base_url: Ollama API URL (default: http://localhost:11434)
+            base_url: Ollama API URL
+                     - Local: http://localhost:11434/api (default)
+                     - Cloud: https://ollama.com/api
             default_model: Default model to use
+                          - Local: llama3.1:8b, qwen2.5:7b, etc.
+                          - Cloud: deepseek-v3.1:671b-cloud, gpt-oss:120b-cloud, etc.
+            api_key: API key for Ollama Cloud (get from https://ollama.com/settings/keys)
+                     Not needed for local Ollama
             app_name: App name (for logging)
             app_url: App URL (for logging)
             timeout: Request timeout in seconds
@@ -101,32 +108,59 @@ class OllamaClient:
         """
         self.base_url = base_url.rstrip('/')
         self.default_model = default_model
+        self.api_key = api_key
         self.app_name = app_name
         self.app_url = app_url
         self.timeout = timeout
 
-        # Cost tracking (always $0.00 for local Ollama!)
+        # Detect if using cloud or local
+        self.is_cloud = 'ollama.com' in base_url.lower()
+
+        # Cost tracking
         self.total_prompt_tokens = 0
         self.total_completion_tokens = 0
         self.total_cost = 0.0
         self.cost_tracker = cost_tracker
 
-        # Initialize Ollama client
+        # Initialize Ollama client with proper headers
         try:
-            self.ollama_client = ollama.Client(host=base_url)
+            if self.is_cloud:
+                if not api_key:
+                    raise OllamaError(
+                        "API key required for Ollama Cloud",
+                        context={
+                            "base_url": base_url,
+                            "help": "Get API key at https://ollama.com/settings/keys"
+                        }
+                    )
+                # Cloud: Use API key in headers
+                self.ollama_client = ollama.Client(
+                    host=base_url,
+                    headers={'Authorization': f'Bearer {api_key}'}
+                )
+            else:
+                # Local: No auth needed
+                self.ollama_client = ollama.Client(host=base_url)
+
             # Test connection
             self._test_connection()
+
             print(f"✅ Ollama Client initialized")
+            print(f"   Mode: {'Cloud (ollama.com)' if self.is_cloud else 'Local'}")
             print(f"   Model: {default_model}")
             print(f"   API: {base_url}")
             print(f"   Timeout: {timeout}s")
-            print(f"   Cost: FREE (local model) 💰")
+            if self.is_cloud:
+                print(f"   Cost: Per-token pricing 💰")
+            else:
+                print(f"   Cost: FREE (local model) 💰")
         except Exception as e:
             raise OllamaError(
                 f"Could not connect to Ollama: {str(e)}",
                 context={
                     "base_url": base_url,
-                    "model": default_model
+                    "model": default_model,
+                    "is_cloud": self.is_cloud
                 }
             )
 
