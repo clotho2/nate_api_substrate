@@ -321,6 +321,30 @@ else:
     # Using OpenRouter or setup mode
     default_model = os.getenv("DEFAULT_LLM_MODEL", "grok-4-1-fast-reasoning")
 
+# ============================================
+# SYNC DATABASE MODEL WITH .ENV ON EVERY RESTART
+# ============================================
+# This ensures changing .env and restarting actually changes the model
+# Without this, the model stays cached in the database forever
+logger.info(f"🔄 Syncing agent model from .env: {default_model}")
+try:
+    agent_state = state_manager.get_agent_state()
+    config = agent_state.get('config', {})
+
+    # Update model to match .env
+    old_model = config.get('model', 'N/A')
+    if old_model != default_model:
+        logger.info(f"   Updating model: {old_model} → {default_model}")
+        config['model'] = default_model
+        agent_state['config'] = config
+        state_manager.update_agent_state(agent_state)
+        logger.info(f"✅ Model synced to .env")
+    else:
+        logger.info(f"✅ Model already matches .env")
+except Exception as e:
+    logger.warning(f"⚠️  Could not sync model to database: {e}")
+    logger.info("   Continuing with model from .env...")
+
 consciousness_loop = ConsciousnessLoop(
     state_manager=state_manager,
     openrouter_client=openrouter_client,
