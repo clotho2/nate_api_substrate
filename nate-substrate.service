@@ -41,6 +41,12 @@ Environment="MODEL_NAME=grok-4-1-fast-reasoning"
 #Environment="OLLAMA_API_URL=http://localhost:11434"
 #Environment="OLLAMA_MODEL=llama3.1:8b"
 
+# OPTION 4: OpenRouter (Access to 100+ models)
+# Uncomment these and comment out Grok/Ollama above to use OpenRouter:
+# Get API key at: https://openrouter.ai/keys
+#Environment="OPENROUTER_API_KEY=your-openrouter-api-key-here"
+#Environment="DEFAULT_LLM_MODEL=openai/gpt-4.1"
+
 # Database Configuration
 Environment="SQLITE_DB_PATH=/opt/aicara/nate-substrate-v2/backend/data/db/substrate_state.db"
 Environment="VERSION_DB_PATH=/opt/aicara/nate-substrate-v2/backend/data/db/versions.db"
