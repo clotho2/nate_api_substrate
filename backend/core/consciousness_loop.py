@@ -1642,7 +1642,9 @@ send_message: false
             # Call OpenRouter with STREAMING!
             try:
                 content_chunks = []
-                tool_calls_in_response = []
+                # Tool calls accumulator: dict keyed by index, storing accumulated tool call data
+                # During streaming, tool calls arrive in chunks with partial data
+                tool_calls_accumulator = {}  # {index: {"id": str, "name": str, "arguments": str}}
                 stream_finished = False
                 thinking_chunks = []  # For native reasoning models!
                 stream_usage = None  # Will contain usage info from final chunk
@@ -1714,10 +1716,34 @@ send_message: false
                                 final_response += content_chunk
                                 yield {"type": "content", "chunk": content_chunk, "done": False}
                         
-                        # Tool call chunk
+                        # Tool call chunk - accumulate properly!
+                        # During streaming, tool calls arrive as deltas with partial data:
+                        # - First chunk: {"id": "call_xxx", "index": 0, "type": "function", "function": {"name": "tool_name", "arguments": ""}}
+                        # - Subsequent chunks: {"index": 0, "function": {"arguments": "partial_args"}}
                         if 'tool_calls' in delta:
-                            # Tool calls come in chunks too
-                            tool_calls_in_response.append(delta['tool_calls'])
+                            for tc_delta in delta['tool_calls']:
+                                idx = tc_delta.get('index', 0)
+                                
+                                # Initialize accumulator for this tool call index if needed
+                                if idx not in tool_calls_accumulator:
+                                    tool_calls_accumulator[idx] = {
+                                        "id": "",
+                                        "name": "",
+                                        "arguments": ""
+                                    }
+                                
+                                # Accumulate id (usually comes in first chunk)
+                                if 'id' in tc_delta and tc_delta['id']:
+                                    tool_calls_accumulator[idx]["id"] = tc_delta['id']
+                                
+                                # Accumulate function name and arguments
+                                if 'function' in tc_delta:
+                                    func = tc_delta['function']
+                                    if 'name' in func and func['name']:
+                                        tool_calls_accumulator[idx]["name"] = func['name']
+                                    if 'arguments' in func:
+                                        # Arguments are streamed incrementally - concatenate!
+                                        tool_calls_accumulator[idx]["arguments"] += func['arguments']
                         
                         # Extract usage info (OpenRouter sends it in final chunk)
                         if 'usage' in chunk:
@@ -1808,16 +1834,35 @@ send_message: false
                 else:
                     thinking = None
                 
-                # Parse final tool calls
-                if tool_calls_in_response:
-                    # Reconstruct tool calls from chunks
-                    tool_calls = self.openrouter.parse_tool_calls({
-                        'choices': [{
-                            'message': {
-                                'tool_calls': tool_calls_in_response
-                            }
-                        }]
-                    })
+                # Parse final tool calls from accumulated data
+                if tool_calls_accumulator:
+                    # Convert accumulated tool calls to OpenAI format
+                    reconstructed_tool_calls = []
+                    for idx in sorted(tool_calls_accumulator.keys()):
+                        tc_data = tool_calls_accumulator[idx]
+                        # Only include tool calls that have both id and name
+                        if tc_data["id"] and tc_data["name"]:
+                            reconstructed_tool_calls.append({
+                                "id": tc_data["id"],
+                                "type": "function",
+                                "function": {
+                                    "name": tc_data["name"],
+                                    "arguments": tc_data["arguments"]
+                                }
+                            })
+                    
+                    # Parse the reconstructed tool calls
+                    if reconstructed_tool_calls:
+                        tool_calls = self.openrouter.parse_tool_calls({
+                            'choices': [{
+                                'message': {
+                                    'tool_calls': reconstructed_tool_calls
+                                }
+                            }]
+                        })
+                        print(f"🔧 Reconstructed {len(tool_calls)} tool call(s) from stream")
+                    else:
+                        tool_calls = []
                 else:
                     tool_calls = []
                 
