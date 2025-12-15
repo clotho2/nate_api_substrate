@@ -47,7 +47,16 @@ def chat():
     {
         "message": "Hello!",
         "session_id": "telegram_session",
-        "stream": false
+        "stream": false,
+        "user_context": {  // Optional: user identification
+            "user_id": 123456,
+            "user_name": "John Doe",
+            "username": "johndoe",
+            "chat_type": "private",  // or "group", "supergroup"
+            "chat_title": "Group Name",  // for group chats
+            "is_dm": true,
+            "platform": "telegram"
+        }
     }
 
     2. IMAGE (Multimodal):
@@ -64,7 +73,8 @@ def chat():
                     "detail": "high"
                 }
             }
-        ]
+        ],
+        "user_context": { ... }  // Optional
     }
 
     3. DOCUMENT:
@@ -76,7 +86,8 @@ def chat():
             "filename": "report.pdf",
             "content": "<base64 or text content>",
             "mime_type": "application/pdf"
-        }
+        },
+        "user_context": { ... }  // Optional
     }
 
     Returns:
@@ -89,6 +100,14 @@ def chat():
         data = request.json
         session_id = data.get('session_id', 'default')
         stream = data.get('stream', False)
+        
+        # Extract user context (for Telegram bot and other platforms)
+        user_context = data.get('user_context', {})
+        if user_context:
+            platform = user_context.get('platform', 'unknown')
+            user_name = user_context.get('user_name', 'Unknown')
+            chat_type = user_context.get('chat_type', 'unknown')
+            logger.info(f"👤 User context: {user_name} via {platform} ({chat_type})")
 
         # Rate limiting
         if _rate_limiter:
@@ -189,6 +208,27 @@ For now, please describe what you'd like me to help you with regarding this docu
         # Add current message to history
         conversation_history.append(user_message)
 
+        # Extract image data for multimodal requests
+        media_data = None
+        media_type = None
+        if is_multimodal:
+            content = data.get('content', [])
+            for item in content:
+                if item.get('type') == 'image_url':
+                    image_url = item.get('image_url', {}).get('url', '')
+                    # Extract base64 data from data URL
+                    if image_url.startswith('data:'):
+                        # Format: data:image/jpeg;base64,<base64_data>
+                        parts = image_url.split(',', 1)
+                        if len(parts) == 2:
+                            # Extract media type from the data URL
+                            media_info = parts[0]  # e.g., "data:image/jpeg;base64"
+                            if 'image/' in media_info:
+                                media_type = media_info.split(':')[1].split(';')[0]  # e.g., "image/jpeg"
+                            media_data = parts[1]  # The base64 data
+                            logger.info(f"📸 Extracted image: {media_type}, {len(media_data)} base64 chars")
+                    break  # Only process first image for now
+
         # Process message through consciousness loop
         if stream:
             # TODO: Implement streaming for multimodal
@@ -205,7 +245,9 @@ For now, please describe what you'd like me to help you with regarding this docu
                         user_message_text=user_message_text,
                         session_id=session_id,
                         conversation_history=conversation_history,
-                        is_multimodal=is_multimodal
+                        is_multimodal=is_multimodal,
+                        media_data=media_data,
+                        media_type=media_type
                     )
                 )
 
@@ -227,7 +269,9 @@ async def _process_message_async(
     user_message_text: str,
     session_id: str,
     conversation_history: list,
-    is_multimodal: bool = False
+    is_multimodal: bool = False,
+    media_data: str = None,
+    media_type: str = None
 ):
     """
     Process message through consciousness loop asynchronously.
@@ -237,6 +281,8 @@ async def _process_message_async(
         session_id: Session identifier
         conversation_history: Full conversation with current message
         is_multimodal: Whether this is a multimodal request
+        media_data: Base64-encoded image data (for multimodal)
+        media_type: MIME type of the media (e.g., 'image/jpeg')
 
     Returns:
         {"response": "...", "message_id": "..."}
@@ -259,17 +305,16 @@ async def _process_message_async(
         )
 
         # Process through consciousness loop
-        # For now, we'll use the existing process_message method
-        # which takes a simple string. In the future, this can be enhanced
-        # to pass the full multimodal content to the Grok API.
-
+        # Pass media_data and media_type for multimodal support (works with OpenRouter/Grok)
         result = await _consciousness_loop.process_message(
             user_message=user_message_text,
             session_id=session_id,
             model=None,  # Use default model
             include_history=True,
             history_limit=20,
-            message_type='inbox'
+            message_type='inbox',
+            media_data=media_data,  # Image data for vision models
+            media_type=media_type   # MIME type (e.g., 'image/jpeg')
         )
 
         # Extract the actual response text from the result

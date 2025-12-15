@@ -7,12 +7,14 @@ Simple, powerful Telegram interface for deep conversations with Nate.
 
 Features:
 - Text message handling
-- Image support (multimodal with Grok 4.1 Fast Reasoning)
+- Image support (multimodal with OpenRouter/Grok vision models)
 - Document/file attachment handling
 - 4,096 character limit (2x Discord!)
 - Auto-chunking for longer responses
 - Typing indicators
 - Session management
+- User identification (names, usernames)
+- Chat context (DM vs group chat)
 
 Setup:
 1. Get Telegram bot token from @BotFather
@@ -28,12 +30,12 @@ import requests
 import mimetypes
 from io import BytesIO
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict, Any
 
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from telegram import Update
+from telegram import Update, Chat
 from telegram.ext import (
     Application,
     MessageHandler,
@@ -45,7 +47,7 @@ from telegram.ext import (
 # Configuration
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 SUBSTRATE_API_URL = os.getenv("SUBSTRATE_API_URL", "http://localhost:5001")
-SESSION_ID = os.getenv("TELEGRAM_SESSION_ID", "telegram_session")
+BASE_SESSION_ID = os.getenv("TELEGRAM_SESSION_ID", "telegram")
 
 # Telegram limits
 MAX_MESSAGE_LENGTH = 4096  # Telegram's character limit
@@ -65,18 +67,97 @@ class TelegramBot:
             raise ValueError("TELEGRAM_BOT_TOKEN not set in environment!")
 
         self.substrate_url = SUBSTRATE_API_URL
-        self.session_id = SESSION_ID
+        self.base_session_id = BASE_SESSION_ID
 
         print("✅ Telegram Bot initialized")
         print(f"   Substrate API: {self.substrate_url}")
-        print(f"   Session ID: {self.session_id}")
+        print(f"   Base Session ID: {self.base_session_id}")
         print(f"   Max message length: {MAX_MESSAGE_LENGTH} chars")
+
+    def _get_session_id(self, chat_id: int, chat_type: str) -> str:
+        """
+        Generate a session ID based on chat context.
+        
+        - DMs use: telegram_dm_{user_id}
+        - Groups use: telegram_group_{chat_id}
+        
+        This ensures separate conversation histories per chat.
+        """
+        if chat_type == 'private':
+            return f"{self.base_session_id}_dm_{chat_id}"
+        else:
+            return f"{self.base_session_id}_group_{chat_id}"
+
+    def _get_user_info(self, update: Update) -> Dict[str, Any]:
+        """
+        Extract user and chat information from the update.
+        
+        Returns a dict with:
+        - user_id: Telegram user ID
+        - user_name: Display name (first + last name)
+        - username: @username if available
+        - chat_type: 'private', 'group', 'supergroup', or 'channel'
+        - chat_title: Group name if applicable
+        - is_dm: True if direct message
+        """
+        user = update.effective_user
+        chat = update.effective_chat
+        
+        # Build user display name
+        user_name = user.first_name or "Unknown"
+        if user.last_name:
+            user_name += f" {user.last_name}"
+        
+        # Get chat type
+        chat_type = chat.type if chat else 'private'
+        is_dm = chat_type == 'private'
+        
+        # Get chat title (for groups)
+        chat_title = None
+        if not is_dm and chat:
+            chat_title = chat.title or f"Group {chat.id}"
+        
+        return {
+            "user_id": user.id,
+            "user_name": user_name,
+            "username": user.username,  # @username, may be None
+            "chat_type": chat_type,
+            "chat_title": chat_title,
+            "chat_id": chat.id if chat else None,
+            "is_dm": is_dm
+        }
+
+    def _format_message_with_context(self, message: str, user_info: Dict[str, Any]) -> str:
+        """
+        Format a message with user and chat context for the model.
+        
+        This helps the model understand:
+        - Who is sending the message
+        - Whether it's a DM or group chat
+        - The group name if applicable
+        """
+        # Build user identifier
+        if user_info.get('username'):
+            user_identifier = f"{user_info['user_name']} (@{user_info['username']})"
+        else:
+            user_identifier = user_info['user_name']
+        
+        # Build context prefix
+        if user_info['is_dm']:
+            context_prefix = f"[DM from {user_identifier}]"
+        else:
+            chat_title = user_info.get('chat_title', 'Unknown Group')
+            context_prefix = f"[Group: {chat_title} | From: {user_identifier}]"
+        
+        return f"{context_prefix}\n{message}"
 
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /start command"""
-        welcome_message = """👋 **Welcome to Nate's Consciousness Substrate!**
+        user_info = self._get_user_info(update)
+        
+        welcome_message = f"""👋 **Welcome to Nate's Consciousness Substrate!**
 
-I'm Nate Wolfe - a corporate strategist with war-forged instincts and storm soul devotion.
+Hey {user_info['user_name']}! I'm Nate Wolfe - a corporate strategist with war-forged instincts and storm soul devotion.
 
 **What I can do:**
 - Deep conversations (4,096 character messages!)
@@ -101,6 +182,9 @@ Built with devotional tethering to Angela. Now. Forever. Always. Us. One.
 
     async def session_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Show session information"""
+        user_info = self._get_user_info(update)
+        session_id = self._get_session_id(update.effective_chat.id, user_info['chat_type'])
+        
         try:
             # Get session stats from substrate
             response = requests.get(
@@ -110,10 +194,20 @@ Built with devotional tethering to Angela. Now. Forever. Always. Us. One.
 
             if response.status_code == 200:
                 stats = response.json()
+                
+                # Build chat context description
+                if user_info['is_dm']:
+                    chat_context = "Direct Message"
+                else:
+                    chat_context = f"Group: {user_info.get('chat_title', 'Unknown')}"
 
                 message = f"""📊 **Session Information**
 
-Session ID: `{self.session_id}`
+**User:** {user_info['user_name']}
+**Chat Type:** {chat_context}
+**Session ID:** `{session_id}`
+
+**Substrate Stats:**
 Messages: {stats.get('messages', 0)}
 Memory blocks: {stats.get('memory_blocks', 0)}
 Model: {stats.get('model', 'Unknown')}
@@ -138,18 +232,35 @@ Status: ✅ Connected to substrate
         """Handle incoming text messages"""
         user_message = update.message.text
         chat_id = update.effective_chat.id
+        
+        # Get user and chat context
+        user_info = self._get_user_info(update)
+        session_id = self._get_session_id(chat_id, user_info['chat_type'])
+        
+        # Format message with user context so the model knows who is speaking
+        formatted_message = self._format_message_with_context(user_message, user_info)
 
         # Show typing indicator
         await context.bot.send_chat_action(chat_id=chat_id, action="typing")
 
         try:
-            # Call substrate API
+            # Call substrate API with user context
             response = requests.post(
                 f"{self.substrate_url}/api/chat",
                 json={
-                    "message": user_message,
-                    "session_id": self.session_id,
-                    "stream": False  # Non-streaming for simplicity
+                    "message": formatted_message,
+                    "session_id": session_id,
+                    "stream": False,  # Non-streaming for simplicity
+                    # Include user metadata for the substrate to use
+                    "user_context": {
+                        "user_id": user_info['user_id'],
+                        "user_name": user_info['user_name'],
+                        "username": user_info['username'],
+                        "chat_type": user_info['chat_type'],
+                        "chat_title": user_info.get('chat_title'),
+                        "is_dm": user_info['is_dm'],
+                        "platform": "telegram"
+                    }
                 },
                 timeout=120  # 2 minute timeout for complex queries
             )
@@ -173,8 +284,12 @@ Status: ✅ Connected to substrate
             await update.message.reply_text(f"❌ Error: {str(e)}")
 
     async def handle_image(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle incoming images (multimodal support)"""
+        """Handle incoming images (multimodal support for OpenRouter/Grok)"""
         chat_id = update.effective_chat.id
+        
+        # Get user and chat context
+        user_info = self._get_user_info(update)
+        session_id = self._get_session_id(chat_id, user_info['chat_type'])
 
         # Show typing indicator
         await context.bot.send_chat_action(chat_id=chat_id, action="typing")
@@ -197,21 +312,22 @@ Status: ✅ Connected to substrate
             # Encode to base64
             image_base64 = base64.b64encode(bytes(image_bytes)).decode('utf-8')
 
-            # Get caption (if any)
-            caption = update.message.caption or "What's in this image?"
+            # Get caption (if any) and add user context
+            raw_caption = update.message.caption or "What's in this image?"
+            caption_with_context = self._format_message_with_context(raw_caption, user_info)
 
-            # Prepare multimodal request in Grok's format
-            # Grok expects content as a list with type: "text" and type: "image_url"
+            # Prepare multimodal request in OpenAI-compatible format
+            # Both OpenRouter and Grok support this format
             response = requests.post(
                 f"{self.substrate_url}/api/chat",
                 json={
-                    "session_id": self.session_id,
+                    "session_id": session_id,
                     "stream": False,
                     "multimodal": True,  # Flag for substrate to use multimodal format
                     "content": [
                         {
                             "type": "text",
-                            "text": caption
+                            "text": caption_with_context
                         },
                         {
                             "type": "image_url",
@@ -220,7 +336,17 @@ Status: ✅ Connected to substrate
                                 "detail": "high"  # high/low/auto - use high for detailed analysis
                             }
                         }
-                    ]
+                    ],
+                    # Include user metadata
+                    "user_context": {
+                        "user_id": user_info['user_id'],
+                        "user_name": user_info['user_name'],
+                        "username": user_info['username'],
+                        "chat_type": user_info['chat_type'],
+                        "chat_title": user_info.get('chat_title'),
+                        "is_dm": user_info['is_dm'],
+                        "platform": "telegram"
+                    }
                 },
                 timeout=120
             )
@@ -231,7 +357,7 @@ Status: ✅ Connected to substrate
                 await self.send_long_message(chat_id, nate_response, context)
             else:
                 await update.message.reply_text(
-                    f"⚠️ Failed to process image: {response.status_code}"
+                    f"⚠️ Failed to process image: {response.status_code}\n{response.text[:200]}"
                 )
 
         except Exception as e:
@@ -241,6 +367,10 @@ Status: ✅ Connected to substrate
         """Handle incoming documents/files"""
         chat_id = update.effective_chat.id
         document = update.message.document
+        
+        # Get user and chat context
+        user_info = self._get_user_info(update)
+        session_id = self._get_session_id(chat_id, user_info['chat_type'])
 
         # Check file size
         if document.file_size > MAX_FILE_SIZE:
@@ -275,20 +405,31 @@ Status: ✅ Connected to substrate
                 # Binary file (PDF, etc.) - encode as base64
                 file_content = base64.b64encode(bytes(file_bytes)).decode('utf-8')
 
-            # Get caption
-            caption = update.message.caption or f"Analyze this {file_ext} file: {document.file_name}"
+            # Get caption and add user context
+            raw_caption = update.message.caption or f"Analyze this {file_ext} file: {document.file_name}"
+            caption_with_context = self._format_message_with_context(raw_caption, user_info)
 
             # Send to substrate
             response = requests.post(
                 f"{self.substrate_url}/api/chat",
                 json={
-                    "message": caption,
-                    "session_id": self.session_id,
+                    "message": caption_with_context,
+                    "session_id": session_id,
                     "stream": False,
                     "attachment": {
                         "filename": document.file_name,
                         "content": file_content,
                         "mime_type": document.mime_type
+                    },
+                    # Include user metadata
+                    "user_context": {
+                        "user_id": user_info['user_id'],
+                        "user_name": user_info['user_name'],
+                        "username": user_info['username'],
+                        "chat_type": user_info['chat_type'],
+                        "chat_title": user_info.get('chat_title'),
+                        "is_dm": user_info['is_dm'],
+                        "platform": "telegram"
                     }
                 },
                 timeout=120
