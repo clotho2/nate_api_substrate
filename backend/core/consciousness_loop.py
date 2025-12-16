@@ -1387,7 +1387,11 @@ send_message: false
             
             # DEEPSEEK V3.2: Check for proprietary tool format in content
             # DeepSeek uses [[tool_call_begin]]name[[tool_sep]]args[[tool_call_end]] format
-            if content and self._uses_custom_tool_format(model) and '[[tool_call_begin]]' in content:
+            is_deepseek_format = self._uses_custom_tool_format(model)
+            has_tool_markers = '[[tool_call_begin]]' in content or '[[tool_sep]]' in content or '[[tool_call_end]]' in content
+            print(f"🔍 DEEPSEEK CHECK: model={model}, is_deepseek={is_deepseek_format}, has_markers={has_tool_markers}, content_len={len(content)}")
+            
+            if content and is_deepseek_format and has_tool_markers:
                 print(f"🔧 DEEPSEEK: Detected proprietary tool format in content")
                 clean_content, deepseek_tools = self._parse_deepseek_tool_calls(content)
                 if deepseek_tools:
@@ -1989,7 +1993,11 @@ send_message: false
                 print(f"📊 Stream complete: {len(content_chunks)} content chunks, {len(thinking_chunks)} thinking chunks, final_response length: {len(final_response)}")
                 
                 # DEEPSEEK V3.2: Check for proprietary tool format in streamed content
-                if final_response and self._uses_custom_tool_format(model) and '[[tool_call_begin]]' in final_response:
+                is_deepseek_format = self._uses_custom_tool_format(model)
+                has_tool_markers = '[[tool_call_begin]]' in final_response or '[[tool_sep]]' in final_response
+                print(f"🔍 DEEPSEEK CHECK: model={model}, is_deepseek={is_deepseek_format}, has_markers={has_tool_markers}")
+                
+                if final_response and is_deepseek_format and has_tool_markers:
                     print(f"🔧 DEEPSEEK STREAMING: Detected proprietary tool format")
                     clean_content, deepseek_tools = self._parse_deepseek_tool_calls(final_response)
                     if deepseek_tools:
@@ -2089,7 +2097,8 @@ send_message: false
                     thinking = None
                 
                 # Parse final tool calls from accumulated data
-                if tool_calls_accumulator:
+                # SKIP if we already have DeepSeek tool calls (they take precedence)
+                if tool_calls_accumulator and not (self._uses_custom_tool_format(model) and all_tool_calls):
                     # Convert accumulated tool calls to OpenAI format
                     reconstructed_tool_calls = []
                     for idx in sorted(tool_calls_accumulator.keys()):

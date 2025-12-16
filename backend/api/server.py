@@ -194,7 +194,8 @@ elif openrouter_api_key and openrouter_api_key.startswith("sk-or-v1-"):
         openrouter_client = OpenRouterClient(
             api_key=openrouter_api_key,
             default_model=os.getenv("DEFAULT_LLM_MODEL", "openrouter/polaris-alpha"),
-            cost_tracker=cost_tracker
+            cost_tracker=cost_tracker,
+            timeout=180  # 3 minutes for large models like DeepSeek V3.2
         )
         logger.info("✅ OpenRouter Client initialized")
     except Exception as e:
