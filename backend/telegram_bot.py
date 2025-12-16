@@ -43,6 +43,12 @@ from telegram.ext import (
     filters,
     ContextTypes
 )
+try:
+    # Prefer aiohttp transport to avoid httpx version/proxy incompatibilities.
+    # (Some environments ship httpx versions that removed/changed proxy params.)
+    from telegram.request import AiohttpRequest  # type: ignore
+except Exception:  # pragma: no cover
+    AiohttpRequest = None  # type: ignore
 
 # Configuration
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -543,7 +549,18 @@ Status: ✅ Connected to substrate
         print("="*60 + "\n")
 
         # Create application
-        app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+        #
+        # NOTE: python-telegram-bot defaults to an httpx-based request backend.
+        # In some deployments, httpx has breaking changes around proxy parameters
+        # (e.g. removing `proxies=`), which can crash the bot at startup.
+        # For robustness, prefer the aiohttp request backend when available.
+        builder = Application.builder().token(TELEGRAM_BOT_TOKEN)
+        if AiohttpRequest is not None:
+            builder = builder.request(AiohttpRequest())
+            print("   Transport: aiohttp (forced)")
+        else:
+            print("   Transport: default (httpx)")
+        app = builder.build()
 
         # Add handlers
         app.add_handler(CommandHandler("start", self.start_command))
