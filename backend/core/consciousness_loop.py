@@ -146,8 +146,10 @@ class ConsciousnessLoop:
         model_lower = model.lower()
         
         # Models that definitely DON'T support tools (known from OpenRouter errors)
+        # NOTE: Some models support tools natively but OpenRouter doesn't translate the format correctly
         NO_TOOL_SUPPORT = {
             'deepseek/deepseek-chat-v3.1:free',  # Free model doesn't support tools
+            'deepseek/deepseek-v3.2',  # Uses proprietary [[tool_call_begin]] format, not OpenAI format!
             'qwen/qwen-3-coder-480b-a35b-instruct:free',  # Free model doesn't support tools
             'google/gemma-3-27b-it:free',
             'google/gemma-3-27b-it',  # Base model also doesn't support tools
