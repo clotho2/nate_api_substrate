@@ -439,11 +439,11 @@ class OpenRouterClient:
         print(f"\n📡 Streaming from: {model}")
         
         try:
-            # 🌊 STREAMING: No total timeout! Only sock_read timeout (60s between chunks)
+            # 🌊 STREAMING: No total timeout! Extended timeouts for large models like DeepSeek V3.2
             stream_timeout = aiohttp.ClientTimeout(
                 total=None,           # No total timeout for streaming!
-                sock_read=60.0,       # 60s between chunks
-                sock_connect=10.0     # 10s to connect
+                sock_read=180.0,      # 3 minutes between chunks (large models can be slow)
+                sock_connect=60.0     # 60s to connect (large models need time to start)
             )
             async with aiohttp.ClientSession(timeout=stream_timeout) as session:
                 async with session.post(url, headers=self._get_headers(), json=payload) as response:
