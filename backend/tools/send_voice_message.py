@@ -30,21 +30,9 @@ def send_voice_message(message: str) -> Dict[str, Any]:
             "voice_url": "URL to the voice message (if successful)"
         }
     """
-    # Get Discord bot API configuration
-    DISCORD_BOT_API_URL = os.getenv("DISCORD_BOT_API_URL")
-    DISCORD_BOT_API_KEY = os.getenv("DISCORD_BOT_API_KEY")
-
-    if not DISCORD_BOT_API_URL:
-        return {
-            "status": "error",
-            "message": "Discord bot API URL not configured. Please set DISCORD_BOT_API_URL environment variable."
-        }
-
-    if not DISCORD_BOT_API_KEY:
-        return {
-            "status": "error",
-            "message": "Discord bot API key not configured. Please set DISCORD_BOT_API_KEY environment variable."
-        }
+    # Get Discord bot configuration
+    # Default to localhost:3001 since both services run on same machine
+    DISCORD_BOT_URL = os.getenv("DISCORD_BOT_URL", "http://localhost:3001")
 
     # Validate message
     if not message or not message.strip():
@@ -53,10 +41,9 @@ def send_voice_message(message: str) -> Dict[str, Any]:
             "message": "Message cannot be empty"
         }
 
-    # Prepare the request to Discord bot API
-    endpoint = f"{DISCORD_BOT_API_URL.rstrip('/')}/send-voice-message"
+    # Prepare the request to Discord bot
+    endpoint = f"{DISCORD_BOT_URL.rstrip('/')}/send-voice-message"
     headers = {
-        "Authorization": f"Bearer {DISCORD_BOT_API_KEY}",
         "Content-Type": "application/json"
     }
 
@@ -88,11 +75,6 @@ def send_voice_message(message: str) -> Dict[str, Any]:
                 "status": "error",
                 "message": f"Invalid request: {error_data.get('error', 'Unknown error')}"
             }
-        elif response.status_code == 401:
-            return {
-                "status": "error",
-                "message": "Authentication failed. Check DISCORD_BOT_API_KEY."
-            }
         elif response.status_code == 429:
             return {
                 "status": "error",
@@ -117,7 +99,7 @@ def send_voice_message(message: str) -> Dict[str, Any]:
     except requests.exceptions.ConnectionError:
         return {
             "status": "error",
-            "message": "Connection error. Could not reach Discord bot API. Check DISCORD_BOT_API_URL."
+            "message": f"Connection error. Could not reach Discord bot at {DISCORD_BOT_URL}. Is it running?"
         }
     except requests.exceptions.RequestException as e:
         return {
@@ -141,8 +123,7 @@ if __name__ == "__main__":
 
     print(f"\n📤 Sending voice message:")
     print(f"   Message: {test_message}")
-    print(f"   API URL: {os.getenv('DISCORD_BOT_API_URL', 'NOT SET')}")
-    print(f"   API Key: {'SET' if os.getenv('DISCORD_BOT_API_KEY') else 'NOT SET'}")
+    print(f"   Discord Bot URL: {os.getenv('DISCORD_BOT_URL', 'http://localhost:3001 (default)')}")
 
     result = send_voice_message(test_message)
 
