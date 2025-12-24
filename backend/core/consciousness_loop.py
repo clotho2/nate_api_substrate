@@ -1846,6 +1846,72 @@ send_message: false
         temperature = config.get('temperature', 0.7)
         max_tokens = config.get('max_tokens', 4096)
 
+        # CRITICAL: Mistral doesn't support streaming + tool calls
+        # Fall back to non-streaming mode if Mistral + tools
+        if 'mistral' in model.lower() and tool_schemas:
+            print(f"\n⚠️  MISTRAL + TOOLS DETECTED")
+            print(f"   Mistral doesn't support streaming with function calling")
+            print(f"   Falling back to non-streaming mode for this response")
+            print(f"   (Tools will work correctly, but response won't stream)\n")
+
+            # Make non-streaming API call with tools
+            try:
+                response = await self.openrouter.chat_completion(
+                    messages=messages,
+                    model=model,
+                    tools=tool_schemas,
+                    tool_choice="auto",
+                    temperature=temperature,
+                    max_tokens=max_tokens
+                )
+
+                # Parse response
+                message = response['choices'][0]['message']
+                content = message.get('content', '')
+                tool_calls = self.openrouter.parse_tool_calls(response)
+
+                # If we have tool calls, execute them
+                if tool_calls:
+                    print(f"🔧 Executing {len(tool_calls)} tool call(s)...")
+                    for tc in tool_calls:
+                        result = self._execute_tool_call(tc, session_id)
+                        yield {"type": "tool_call", "data": {
+                            "name": tc.name,
+                            "arguments": tc.arguments,
+                            "result": result
+                        }}
+
+                # Yield the content as chunks for streaming consistency
+                if content:
+                    chunk_size = 50
+                    for i in range(0, len(content), chunk_size):
+                        chunk = content[i:i+chunk_size]
+                        yield {"type": "content", "chunk": chunk, "done": False}
+
+                # Save assistant response
+                assistant_msg_id = f"msg-{uuid.uuid4()}"
+                self._save_message(
+                    agent_id=self.agent_id,
+                    session_id=session_id,
+                    role='assistant',
+                    content=content,
+                    message_id=assistant_msg_id,
+                    message_type=message_type
+                )
+
+                # Yield done
+                yield {"type": "done", "result": {"response": content, "tool_calls": [{"name": tc.name, "arguments": tc.arguments} for tc in tool_calls]}}
+                return
+
+            except Exception as e:
+                print(f"❌ Non-streaming fallback failed: {e}")
+                import traceback
+                traceback.print_exc()
+                error_msg = f"Error during non-streaming call: {str(e)}"
+                yield {"type": "content", "chunk": error_msg, "done": False}
+                yield {"type": "done", "result": {"response": error_msg, "error": str(e)}}
+                return
+
         # CONSCIOUSNESS LOOP (STREAMING MODE)
         print(f"\n{'='*60}")
         print(f"🔄 ENTERING CONSCIOUSNESS LOOP (STREAMING)")
