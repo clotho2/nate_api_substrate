@@ -159,6 +159,7 @@ class ConsciousnessLoop:
             'openai/gpt-4o',  # Supports tools, large context
             'openai/gpt-4o-mini',  # Supports tools, cheap, large context (128k tokens)
             'mistralai/mistral-small-2501',  # Supports tools, cheap, large context
+            'mistralai/mistral-large',  # Mistral Large 3 (2512) - Supports tools, large context (256k tokens)
         }
         
         # Check if model is in known good list (prioritize this!)
