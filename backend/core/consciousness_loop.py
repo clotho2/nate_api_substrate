@@ -1898,7 +1898,14 @@ send_message: false
                     if 'choices' in chunk and len(chunk['choices']) > 0:
                         delta = chunk['choices'][0].get('delta', {})
                         choice = chunk['choices'][0]
-                        
+
+                        # DEBUG: Log delta structure to see what Mistral is sending
+                        delta_keys = list(delta.keys()) if delta else []
+                        if delta_keys and delta_keys != ['content']:  # Don't spam for regular content
+                            print(f"🔍 Delta keys: {delta_keys}")
+                            if 'tool_calls' in delta:
+                                print(f"   ✅ Found tool_calls in delta: {delta['tool_calls']}")
+
                         # NATIVE REASONING: Extract reasoning chunks! 🤖
                         # For models like Kimi K2, reasoning comes in separate chunks
                         if is_native:
@@ -1990,7 +1997,24 @@ send_message: false
                         if choice.get('finish_reason'):
                             stream_finished = True
                             print(f"✅ Stream finished: {choice.get('finish_reason')}")
-                            
+
+                            # DEBUG: Check if tool_calls are in the final message (some models do this)
+                            if 'message' in choice:
+                                final_msg = choice.get('message', {})
+                                print(f"🔍 Final message keys: {list(final_msg.keys())}")
+                                if 'tool_calls' in final_msg:
+                                    print(f"   ⚠️  Found tool_calls in FINAL MESSAGE (not deltas): {len(final_msg['tool_calls'])} calls")
+                                    print(f"   Tool calls: {final_msg['tool_calls']}")
+                                    # Add them to accumulator now!
+                                    for i, tc in enumerate(final_msg['tool_calls']):
+                                        if i not in tool_calls_accumulator:
+                                            tool_calls_accumulator[i] = {
+                                                "id": tc.get('id', ''),
+                                                "name": tc.get('function', {}).get('name', ''),
+                                                "arguments": tc.get('function', {}).get('arguments', '')
+                                            }
+                                            print(f"   Added tool call from final message: {tool_calls_accumulator[i]['name']}")
+
                             # Final reasoning extraction (if available in final chunk)
                             if is_native and 'message' in choice:
                                 final_msg = choice.get('message', {})
