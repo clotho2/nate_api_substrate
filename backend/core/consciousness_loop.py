@@ -1850,6 +1850,8 @@ send_message: false
         # When using Mistral, always use non-streaming mode
         # (Mistral narrates about calling tools instead of actually calling them during streaming)
         is_mistral = 'mistral' in model.lower()
+        print(f"\n🔍 DEBUG: Model check - model='{model}', is_mistral={is_mistral}")
+
         if is_mistral:
             print(f"\n⚠️  MISTRAL DETECTED - Using non-streaming mode")
             print(f"   Reason: Mistral doesn't support streaming + function calling")
@@ -1867,10 +1869,34 @@ send_message: false
                 stream=False
             )
 
+            # DEBUG: Show raw API response structure
+            print(f"\n{'='*60}")
+            print(f"🔍 RAW API RESPONSE (Mistral non-streaming)")
+            print(f"{'='*60}")
+            print(f"Response keys: {list(response.keys())}")
+            if 'choices' in response and response['choices']:
+                choice = response['choices'][0]
+                print(f"Choice keys: {list(choice.keys())}")
+                if 'message' in choice:
+                    message = choice['message']
+                    print(f"Message keys: {list(message.keys())}")
+                    print(f"Message role: {message.get('role')}")
+                    print(f"Message content length: {len(message.get('content', ''))} chars")
+                    if 'tool_calls' in message:
+                        print(f"✅ TOOL_CALLS FOUND: {len(message['tool_calls'])} call(s)")
+                        for i, tc in enumerate(message['tool_calls']):
+                            print(f"   [{i}] {tc.get('function', {}).get('name')} - args: {tc.get('function', {}).get('arguments', '')[:100]}")
+                    else:
+                        print(f"❌ NO TOOL_CALLS in message")
+                        print(f"Content preview: {message.get('content', '')[:200]}")
+            print(f"{'='*60}\n")
+
             # Parse response and tool calls
             message = response['choices'][0]['message']
             content = message.get('content', '') or ''
             tool_calls = self.openrouter.parse_tool_calls(response)
+
+            print(f"Parsed {len(tool_calls)} tool calls from response")
 
             # Execute any tool calls
             executed_tools = []
