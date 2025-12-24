@@ -1306,6 +1306,34 @@ send_message: false
                     max_tokens=max_tokens
                 )
                 print(f"✅ Response received from LLM API!")
+
+                # DEBUG MISTRAL: Show raw response structure for Mistral models
+                if 'mistral' in model.lower():
+                    print(f"\n{'='*60}")
+                    print(f"🔍 MISTRAL RAW RESPONSE (non-streaming)")
+                    print(f"{'='*60}")
+                    print(f"Model: {model}")
+                    print(f"Response keys: {list(response.keys())}")
+                    if 'choices' in response and response['choices']:
+                        choice = response['choices'][0]
+                        print(f"Choice keys: {list(choice.keys())}")
+                        if 'message' in choice:
+                            msg = choice['message']
+                            print(f"Message keys: {list(msg.keys())}")
+                            print(f"Message role: {msg.get('role')}")
+                            content_len = len(msg.get('content', '')) if msg.get('content') else 0
+                            print(f"Content length: {content_len} chars")
+                            if 'tool_calls' in msg and msg['tool_calls']:
+                                print(f"✅ TOOL_CALLS FOUND: {len(msg['tool_calls'])} call(s)")
+                                for i, tc in enumerate(msg['tool_calls']):
+                                    func = tc.get('function', {})
+                                    print(f"   [{i}] {func.get('name')} - args: {func.get('arguments', '')[:100]}")
+                            else:
+                                print(f"❌ NO TOOL_CALLS in message")
+                                preview = msg.get('content', '')[:300] if msg.get('content') else 'No content'
+                                print(f"Content preview: {preview}")
+                    print(f"{'='*60}\n")
+
             except Exception as e:
                 # If tool calling failed and we had tools, retry without tools
                 error_str = str(e).lower()
