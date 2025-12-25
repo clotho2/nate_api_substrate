@@ -294,16 +294,26 @@ class OpenRouterClient:
         if tools:
             payload["tools"] = tools
             payload["tool_choice"] = tool_choice
-        
+
         # Add any extra kwargs (can override max_completion_tokens!)
         payload.update(kwargs)
-        
+
         # Log request (helpful for debugging!)
         print(f"\n📤 OpenRouter Request:")
         print(f"   Model: {model}")
         print(f"   Messages: {len(messages)}")
         print(f"   Tools: {len(tools) if tools else 0}")
+        print(f"   Tool choice: {payload.get('tool_choice', 'NOT SET')}")
         print(f"   Stream: {stream}")
+        print(f"   Payload keys: {list(payload.keys())}")
+
+        # DEBUG: Show last few messages to compare heartbeat vs interactive
+        if messages and len(messages) > 0:
+            print(f"🔍 Last 3 messages (role check):")
+            for i, msg in enumerate(messages[-3:]):
+                role = msg.get('role', 'unknown')
+                content_preview = str(msg.get('content', ''))[:80]
+                print(f"   [{len(messages)-3+i}] role={role}: {content_preview}...")
         
         try:
             async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=self.timeout)) as session:
@@ -325,6 +335,20 @@ class OpenRouterClient:
                     
                     # Parse response
                     data = await response.json()
+                    
+                    # DEBUG: Log raw response structure for troubleshooting model-specific issues
+                    if 'choices' in data and len(data['choices']) > 0:
+                        msg = data['choices'][0].get('message', {})
+                        print(f"\n🔍 DEBUG OpenRouter Response:")
+                        print(f"   Message keys: {list(msg.keys())}")
+                        if 'content' in msg:
+                            content_val = msg['content']
+                            content_type = type(content_val).__name__
+                            content_preview = str(content_val)[:300] if content_val else 'None'
+                            print(f"   Content type: {content_type}")
+                            print(f"   Content preview: {content_preview}")
+                        if 'tool_calls' in msg:
+                            print(f"   Tool calls: {len(msg['tool_calls'])}")
                     
                     # Track usage
                     if 'usage' in data:
@@ -390,37 +414,45 @@ class OpenRouterClient:
         messages: List[Dict[str, Any]],
         model: Optional[str] = None,
         tools: Optional[List[Dict]] = None,
+        tool_choice: str = "auto",
         **kwargs
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """
         Stream chat completion from OpenRouter.
-        
+
         Args:
             messages: List of message dicts
             model: Model to use
             tools: Tool definitions
+            tool_choice: How to handle tools ("auto", "none", or {"type": "function", "function": {"name": "..."}})
             **kwargs: Additional parameters
-            
+
         Yields:
             Delta dicts from streaming response
-            
+
         Raises:
             OpenRouterError: If request fails
         """
         model = model or self.default_model
         url = f"{self.base_url}/chat/completions"
-        
+
         payload = {
             "model": model,
             "messages": messages,
             "stream": True,
             **kwargs
         }
-        
+
         if tools:
             payload["tools"] = tools
-        
+            payload["tool_choice"] = tool_choice
+
         print(f"\n📡 Streaming from: {model}")
+        print(f"   Tools: {len(tools) if tools else 0}")
+        print(f"   Tool choice: {tool_choice if tools else 'N/A'}")
+        if tools:
+            print(f"   Tool names: {[t.get('function', {}).get('name', 'unknown') for t in tools[:5]]}")
+        print(f"   Payload includes: tools={('tools' in payload)}, tool_choice={('tool_choice' in payload)}")
         
         try:
             # 🌊 STREAMING: No total timeout! Only sock_read timeout (60s between chunks)

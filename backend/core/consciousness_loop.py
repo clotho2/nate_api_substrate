@@ -69,14 +69,15 @@ class ConsciousnessLoop:
     def __init__(
         self,
         state_manager: StateManager,
-        openrouter_client: Union[GrokClient, OpenRouterClient],  # ⚡ Supports both Grok and OpenRouter!
+        openrouter_client: Union[GrokClient, OpenRouterClient],  # ⚡ Supports Grok, OpenRouter, and Ollama!
         memory_tools: MemoryTools,
         max_tool_calls_per_turn: int = 10,
         default_model: Optional[str] = None,  # Model from .env or agent config - no hardcoded defaults
         message_manager=None,  # 🏴‍☠️ PostgreSQL message manager!
         memory_engine=None,  # ⚡ Memory Coherence Engine (Nested Learning!)
         code_executor=None,  # 🔥 Code Executor for MCP!
-        mcp_client=None  # 🔥 MCP Client!
+        mcp_client=None,  # 🔥 MCP Client!
+        vision_preprocessor=None  # 🖼️ Vision Preprocessor for universal image support!
     ):
         """
         Initialize consciousness loop.
@@ -84,15 +85,16 @@ class ConsciousnessLoop:
         Args:
             state_manager: State manager instance
             message_manager: Optional PostgreSQL message manager (for persistence!)
-            openrouter_client: LLM client (GrokClient or OpenRouterClient)
+            openrouter_client: LLM client (GrokClient, OpenRouterClient, or OllamaClient)
             memory_tools: Memory tools instance
             max_tool_calls_per_turn: Max tool calls per turn (anti-loop!)
             default_model: Default LLM model
             code_executor: Code executor for MCP code execution
             mcp_client: MCP client for tool discovery
+            vision_preprocessor: Vision preprocessor for universal image support
         """
         self.state = state_manager
-        self.llm_client = openrouter_client  # Can be GrokClient or OpenRouterClient
+        self.llm_client = openrouter_client  # Can be GrokClient, OpenRouterClient, or OllamaClient
         self.openrouter = openrouter_client  # Legacy compatibility
         self.tools = memory_tools
         self.memory = memory_tools.memory_system  # Access to memory system for stats (renamed from .memory to .memory_system)
@@ -102,6 +104,7 @@ class ConsciousnessLoop:
         self.memory_engine = memory_engine  # ⚡ Memory Coherence Engine (Nested Learning!)
         self.code_executor = code_executor  # 🔥 Code Execution!
         self.mcp_client = mcp_client  # 🔥 MCP Client!
+        self.vision_preprocessor = vision_preprocessor  # 🖼️ Vision Preprocessor!
         
         # Track if we have a valid API key
         self.api_key_configured = openrouter_client is not None
@@ -124,6 +127,8 @@ class ConsciousnessLoop:
             print(f"   🔥 Code Execution: ENABLED (MCP + Skills)!")
         if mcp_client:
             print(f"   🔥 MCP Client: ENABLED!")
+        if vision_preprocessor:
+            print(f"   🖼️  Vision Preprocessing: ENABLED (Images work with ANY model)!")
     
     def _model_supports_tools(self, model: str) -> bool:
         """
@@ -147,6 +152,12 @@ class ConsciousnessLoop:
             'google/gemma-3-27b-it:free',
             'google/gemma-3-27b-it',  # Base model also doesn't support tools
             # Add more as we discover them
+        }
+        
+        # Models that use proprietary tool format (need custom parsing)
+        # DeepSeek V3.2 uses: [[tool_call_begin]]name[[tool_sep]]args[[tool_call_end]]
+        CUSTOM_TOOL_FORMAT = {
+            'deepseek/deepseek-v3.2',
         }
         
         # Models that DO support tools (known good models - especially free ones!)
@@ -184,6 +195,122 @@ class ConsciousnessLoop:
         # Default: Assume tools are supported (most models do)
         return True
     
+    def _uses_custom_tool_format(self, model: str) -> bool:
+        """Check if model uses a proprietary tool calling format."""
+        model_lower = model.lower()
+        CUSTOM_TOOL_FORMAT = {
+            'deepseek/deepseek-v3.2',
+        }
+        return model_lower in CUSTOM_TOOL_FORMAT
+    
+    def _parse_deepseek_tool_calls(self, content: str) -> tuple:
+        """
+        Parse DeepSeek V3.2's proprietary tool format from content.
+        
+        DeepSeek uses: [[tool_call_begin]]tool_name[[tool_sep]]arguments[[tool_call_end]]
+        
+        Args:
+            content: Response content that may contain tool calls
+            
+        Returns:
+            Tuple of (clean_content, tool_calls_list)
+            - clean_content: Content with tool call markers removed
+            - tool_calls_list: List of parsed tool calls in standard format
+        """
+        import re
+        
+        tool_calls = []
+        clean_content = content
+        
+        # First, check if this is just template/placeholder text (not real tool calls)
+        # DeepSeek sometimes outputs its format instructions instead of actual calls
+        if 'tool_name[[tool_sep]]arguments' in content or '[[tool_call_begin]]tool_name' in content:
+            print(f"⚠️  DEEPSEEK: Content contains template placeholders, not real tool calls")
+            # This is template text, not actual tool calls - remove it all
+            # Remove the template patterns
+            clean_content = re.sub(r'\[\[tool_call_begin\]\]tool_name\[\[tool_sep\]\]arguments\[\[tool_call_end\]\]', '', content)
+            clean_content = re.sub(r'_name\[\[tool_sep\]\]arguments', '', clean_content)
+            clean_content = re.sub(r'\[\[tool_call_begin\]\]', '', clean_content)
+            clean_content = re.sub(r'\[\[tool_call_end\]\]', '', clean_content)
+            clean_content = re.sub(r'\[\[tool_sep\]\]', '', clean_content)
+            # Remove Chinese instructions
+            clean_content = re.sub(r'[\d]+\.\s*当.*?(?=\n|$)', '', clean_content)
+            clean_content = re.sub(r'\n{2,}', '\n', clean_content).strip()
+            return clean_content, []  # No actual tool calls
+        
+        # Pattern to match DeepSeek's tool call format
+        # [[tool_call_begin]]tool_name[[tool_sep]]{"arg": "value"}[[tool_call_end]]
+        pattern = r'\[\[tool_call_begin\]\](\w+)\[\[tool_sep\]\](.*?)\[\[tool_call_end\]\]'
+        
+        matches = re.findall(pattern, content, re.DOTALL)
+        
+        # Filter out matches that are just placeholders
+        real_matches = [(name, args) for name, args in matches 
+                        if name != 'tool_name' and args.strip() != 'arguments']
+        
+        if real_matches:
+            print(f"🔧 DEEPSEEK TOOL FORMAT: Found {len(real_matches)} tool call(s)")
+            
+            for i, (tool_name, arguments_str) in enumerate(real_matches):
+                try:
+                    # Parse arguments as JSON
+                    arguments = json.loads(arguments_str.strip()) if arguments_str.strip() else {}
+                    
+                    # Create a ToolCall-compatible object
+                    from core.openrouter_client import ToolCall
+                    tool_call = ToolCall(
+                        id=f"deepseek_call_{i}",
+                        name=tool_name,
+                        arguments=arguments
+                    )
+                    tool_calls.append(tool_call)
+                    print(f"   ✅ Parsed: {tool_name}({json.dumps(arguments)[:100]}...)")
+                    
+                except json.JSONDecodeError as e:
+                    print(f"   ⚠️  Failed to parse arguments for {tool_name}: {e}")
+                    print(f"      Raw args: {arguments_str[:200]}")
+            
+            # Remove tool call markers from content
+            clean_content = re.sub(pattern, '', content, flags=re.DOTALL)
+            
+            # Also remove DeepSeek's Chinese tool instructions if present
+            # These are internal instructions that shouldn't be shown to user
+            chinese_instruction_patterns = [
+                r'[\d]+\.\s*当\s*##?工具列表.*?(?=\n\n|\n[\d]+\.|\Z)',  # Numbered instructions
+                r'##?工具列表.*',  # Tool list header
+                r'当.*禁止返回工具调用格式.*',  # Tool format instructions
+                r'\[\[tool_sep\]\]',  # Leftover separators
+                r'tool_name',  # Literal "tool_name" placeholder
+                r'arguments',  # Literal "arguments" placeholder  
+            ]
+            for cleanup_pattern in chinese_instruction_patterns:
+                clean_content = re.sub(cleanup_pattern, '', clean_content, flags=re.DOTALL)
+            
+            # Clean up any remaining artifacts
+            clean_content = re.sub(r'\[\[tool_call_begin\]\].*', '', clean_content)
+            clean_content = re.sub(r'.*\[\[tool_call_end\]\]', '', clean_content)
+            
+            # Remove excessive whitespace/newlines left after cleaning
+            clean_content = re.sub(r'\n{3,}', '\n\n', clean_content)
+            clean_content = clean_content.strip()
+            
+            print(f"   📝 Clean content remaining: {len(clean_content)} chars")
+        elif matches:
+            # We have matches but they were all placeholders - still clean up
+            print(f"⚠️  DEEPSEEK: Found {len(matches)} matches but all were placeholders")
+            clean_content = re.sub(pattern, '', content, flags=re.DOTALL)
+            # Clean Chinese instructions
+            for cleanup_pattern in [
+                r'[\d]+\.\s*当.*?(?=\n|$)',
+                r'\[\[tool_sep\]\]',
+                r'\[\[tool_call_begin\]\]',
+                r'\[\[tool_call_end\]\]',
+            ]:
+                clean_content = re.sub(cleanup_pattern, '', clean_content)
+            clean_content = re.sub(r'\n{2,}', '\n', clean_content).strip()
+        
+        return clean_content, tool_calls
+
     def _build_graph_from_conversation(self, session_id: str):
         """
         Build knowledge graph from conversation (background task).
@@ -1154,8 +1281,23 @@ send_message: false
             print(f"  • Tools: {len(tool_schemas) if tool_schemas else 0} ({'enabled' if tool_schemas else 'disabled - model does not support tools'})")
             print(f"  • Temperature: {temperature}")
             print(f"  • Max Tokens: {max_tokens}")
+
+            # 🖼️ VISION PREPROCESSING - Enable images for ANY model!
+            if self.vision_preprocessor:
+                # Check if main model supports native vision
+                main_model_has_vision = (
+                    hasattr(self.llm_client, 'supports_multimodal') and
+                    self.llm_client.supports_multimodal()
+                )
+
+                # Preprocess images if needed
+                messages = self.vision_preprocessor.preprocess_messages(
+                    messages,
+                    main_model_supports_vision=main_model_has_vision
+                )
+
             print(f"\n⏳ Waiting for response from {model}...\n")
-            
+
             try:
                 response = await self.openrouter.chat_completion(
                     messages=messages,
@@ -1165,6 +1307,34 @@ send_message: false
                     max_tokens=max_tokens
                 )
                 print(f"✅ Response received from LLM API!")
+
+                # DEBUG MISTRAL: Show raw response structure for Mistral models
+                if 'mistral' in model.lower():
+                    print(f"\n{'='*60}")
+                    print(f"🔍 MISTRAL RAW RESPONSE (non-streaming)")
+                    print(f"{'='*60}")
+                    print(f"Model: {model}")
+                    print(f"Response keys: {list(response.keys())}")
+                    if 'choices' in response and response['choices']:
+                        choice = response['choices'][0]
+                        print(f"Choice keys: {list(choice.keys())}")
+                        if 'message' in choice:
+                            msg = choice['message']
+                            print(f"Message keys: {list(msg.keys())}")
+                            print(f"Message role: {msg.get('role')}")
+                            content_len = len(msg.get('content', '')) if msg.get('content') else 0
+                            print(f"Content length: {content_len} chars")
+                            if 'tool_calls' in msg and msg['tool_calls']:
+                                print(f"✅ TOOL_CALLS FOUND: {len(msg['tool_calls'])} call(s)")
+                                for i, tc in enumerate(msg['tool_calls']):
+                                    func = tc.get('function', {})
+                                    print(f"   [{i}] {func.get('name')} - args: {func.get('arguments', '')[:100]}")
+                            else:
+                                print(f"❌ NO TOOL_CALLS in message")
+                                preview = msg.get('content', '')[:300] if msg.get('content') else 'No content'
+                                print(f"Content preview: {preview}")
+                    print(f"{'='*60}\n")
+
             except Exception as e:
                 # If tool calling failed and we had tools, retry without tools
                 error_str = str(e).lower()
@@ -1205,9 +1375,93 @@ send_message: false
             
             # Get response content and tool calls
             assistant_msg = response['choices'][0]['message']
-            content = assistant_msg.get('content', '').strip()
+            
+            # DEBUG: Log the full assistant message structure
+            print(f"\n🔍 DEBUG: Raw assistant_msg keys: {list(assistant_msg.keys())}")
+            print(f"🔍 DEBUG: assistant_msg content type: {type(assistant_msg.get('content'))}")
+            raw_content = assistant_msg.get('content')
+            if raw_content:
+                content_preview = str(raw_content)[:500] if raw_content else 'None'
+                print(f"🔍 DEBUG: Raw content (first 500 chars): {content_preview}")
+            
+            # Check for reasoning field (DeepSeek V3.2, o1, R1, etc.)
+            if 'reasoning' in assistant_msg:
+                print(f"🧠 DEBUG: Found 'reasoning' field: {str(assistant_msg['reasoning'])[:200]}")
+            if 'reasoning_content' in assistant_msg:
+                print(f"🧠 DEBUG: Found 'reasoning_content' field: {str(assistant_msg['reasoning_content'])[:200]}")
+            
+            # Handle content - some models return string, others return array of content blocks
+            raw_content = assistant_msg.get('content')
+            if raw_content is None:
+                content = ''
+            elif isinstance(raw_content, str):
+                content = raw_content.strip()
+            elif isinstance(raw_content, list):
+                # Some models (like Claude, etc.) return content as array of blocks
+                # Extract text from all text blocks
+                text_parts = []
+                for block in raw_content:
+                    if isinstance(block, dict):
+                        if block.get('type') == 'text':
+                            text_parts.append(block.get('text', ''))
+                        elif 'text' in block:
+                            text_parts.append(block.get('text', ''))
+                    elif isinstance(block, str):
+                        text_parts.append(block)
+                content = '\n'.join(text_parts).strip()
+                print(f"🔍 DEBUG: Converted list content to string: {len(content)} chars")
+            else:
+                # Unknown format - convert to string
+                content = str(raw_content).strip()
+                print(f"⚠️  WARNING: Unknown content type {type(raw_content)}, converted to string")
             # Only parse tool calls if tools were enabled
             tool_calls = self.openrouter.parse_tool_calls(response) if tool_schemas else []
+            
+            # DEEPSEEK V3.2: Check for proprietary tool format in content
+            # DeepSeek uses [[tool_call_begin]]name[[tool_sep]]args[[tool_call_end]] format
+            is_deepseek_format = self._uses_custom_tool_format(model)
+            has_tool_markers = '[[tool_call_begin]]' in content or '[[tool_sep]]' in content or '[[tool_call_end]]' in content
+            print(f"🔍 DEEPSEEK CHECK: model={model}, is_deepseek={is_deepseek_format}, has_markers={has_tool_markers}, content_len={len(content)}")
+            
+            if content and is_deepseek_format and has_tool_markers:
+                print(f"🔧 DEEPSEEK: Detected proprietary tool format in content")
+                clean_content, deepseek_tools = self._parse_deepseek_tool_calls(content)
+                if deepseek_tools:
+                    tool_calls = deepseek_tools  # Use parsed tool calls
+                    content = clean_content  # Use cleaned content
+                    print(f"   ✅ Extracted {len(tool_calls)} tool calls, {len(content)} chars remaining content")
+            
+            # FIX: Detect if content contains tool schema JSON (DeepSeek V3.2 reasoning leak)
+            # Some models output their reasoning about tools (including schemas) as content
+            if content and tool_schemas:
+                # Check for multiple tool schema indicators
+                schema_indicators = ['"parameters":', '"properties":', '"type": "function"', 
+                                     '"description":', '"type": "object"', '"required":']
+                indicator_count = sum(1 for ind in schema_indicators if ind in content)
+                
+                if indicator_count >= 3:
+                    print(f"⚠️  DETECTED: Content contains tool schema JSON (reasoning leak)")
+                    print(f"   This is likely the model's reasoning output, not the actual response.")
+                    
+                    # If we have tool calls, ignore the schema content - it's just reasoning
+                    if tool_calls:
+                        print(f"   ✅ Tool calls present - ignoring schema content as reasoning")
+                        content = ""  # Clear the schema content, let tool calls proceed
+                    else:
+                        # No tool calls but schema in content - try to extract any real content
+                        # Look for text before or after the JSON
+                        import re
+                        # Try to find actual message content (not JSON)
+                        lines = content.split('\n')
+                        real_lines = [l for l in lines if not any(ind in l for ind in schema_indicators)]
+                        filtered = '\n'.join(real_lines).strip()
+                        
+                        if filtered and len(filtered) > 20:
+                            print(f"   ✅ Extracted {len(filtered)} chars of real content")
+                            content = filtered
+                        else:
+                            print(f"   ⚠️  No real content found - will retry without tools")
+                            content = ""  # Force retry without tools
             
             print(f"\n📥 ANALYZING RESPONSE...")
             print(f"  • Content: {'Yes' if content else 'No'} ({len(content)} chars)")
@@ -1224,6 +1478,26 @@ send_message: false
             # 3. No content + No tools = ERROR ❌
             
             print(f"\n🤔 DECISION:")
+            
+            # SPECIAL CASE: No content and no tool calls after schema detection
+            # This means model output was all schema JSON - retry without tools
+            if not content and not tool_calls and tool_schemas:
+                print(f"⚠️  Model only output tool schemas - retrying WITHOUT tools...")
+                tool_schemas = None  # Disable tools for retry
+                try:
+                    response = await self.openrouter.chat_completion(
+                        messages=messages,
+                        model=model,
+                        tools=None,
+                        temperature=temperature,
+                        max_tokens=max_tokens
+                    )
+                    assistant_msg = response['choices'][0]['message']
+                    content = assistant_msg.get('content', '').strip() if isinstance(assistant_msg.get('content'), str) else ''
+                    tool_calls = []
+                    print(f"✅ Retry successful! Got {len(content)} chars of content")
+                except Exception as retry_e:
+                    print(f"❌ Retry failed: {str(retry_e)}")
             
             if content and not tool_calls:
                 # ✅ FINAL ANSWER - model responded naturally!
@@ -1600,8 +1874,141 @@ send_message: false
         config = agent_state.get('config', {})
         temperature = config.get('temperature', 0.7)
         max_tokens = config.get('max_tokens', 4096)
-        
-                # STREAMING LOOP! 🚀
+
+        # MISTRAL DOESN'T SUPPORT STREAMING + TOOLS
+        # When using Mistral, always use non-streaming mode
+        # (Mistral narrates about calling tools instead of actually calling them during streaming)
+        is_mistral = 'mistral' in model.lower()
+        print(f"\n🔍 DEBUG: Model check - model='{model}', is_mistral={is_mistral}")
+
+        if is_mistral:
+            print(f"\n⚠️  MISTRAL DETECTED - Using non-streaming mode")
+            print(f"   Reason: Mistral doesn't support streaming + function calling")
+            print(f"   Response will appear instantly instead of streaming\n")
+
+            # Count tokens to check for context size issues
+            from core.token_counter import TokenCounter
+            counter = TokenCounter(model)
+            message_tokens = counter.count_messages(messages)
+            tool_tokens = 0
+            if tool_schemas:
+                # Estimate tool schema tokens
+                import json
+                tool_json = json.dumps(tool_schemas)
+                tool_tokens = counter.count_text(tool_json)
+
+            print(f"🔍 CONTEXT SIZE CHECK:")
+            print(f"   Messages: {len(messages)}")
+            print(f"   Message tokens: {message_tokens:,}")
+            print(f"   Tool schemas: {len(tool_schemas) if tool_schemas else 0}")
+            print(f"   Tool schema tokens: {tool_tokens:,}")
+            print(f"   Total input tokens: {message_tokens + tool_tokens:,}")
+            print(f"   Max tokens for response: {max_tokens}")
+            print(f"   Total capacity needed: {message_tokens + tool_tokens + max_tokens:,}")
+            print(f"   Mistral context window: 256,000 tokens")
+
+            if message_tokens + tool_tokens + max_tokens > 256000:
+                print(f"   ⚠️  WARNING: Context might exceed Mistral's window!")
+
+            # Use the regular non-streaming process_message
+            # Set streaming=False to get the complete response
+            response = await self.openrouter.chat_completion(
+                messages=messages,
+                model=model,
+                tools=tool_schemas,
+                tool_choice="auto",
+                temperature=temperature,
+                max_tokens=max_tokens,
+                stream=False
+            )
+
+            # DEBUG: Show raw API response structure
+            print(f"\n{'='*60}")
+            print(f"🔍 RAW API RESPONSE (Mistral non-streaming)")
+            print(f"{'='*60}")
+            print(f"Response keys: {list(response.keys())}")
+            if 'choices' in response and response['choices']:
+                choice = response['choices'][0]
+                print(f"Choice keys: {list(choice.keys())}")
+                if 'message' in choice:
+                    message = choice['message']
+                    print(f"Message keys: {list(message.keys())}")
+                    print(f"Message role: {message.get('role')}")
+                    print(f"Message content length: {len(message.get('content', ''))} chars")
+                    if 'tool_calls' in message:
+                        print(f"✅ TOOL_CALLS FOUND: {len(message['tool_calls'])} call(s)")
+                        for i, tc in enumerate(message['tool_calls']):
+                            print(f"   [{i}] {tc.get('function', {}).get('name')} - args: {tc.get('function', {}).get('arguments', '')[:100]}")
+                    else:
+                        print(f"❌ NO TOOL_CALLS in message")
+                        print(f"Content preview: {message.get('content', '')[:200]}")
+            print(f"{'='*60}\n")
+
+            # Parse response and tool calls
+            message = response['choices'][0]['message']
+            content = message.get('content', '') or ''
+            tool_calls = self.openrouter.parse_tool_calls(response)
+
+            print(f"Parsed {len(tool_calls)} tool calls from response")
+
+            # Execute any tool calls
+            executed_tools = []
+            if tool_calls:
+                print(f"🔧 Executing {len(tool_calls)} tool call(s)...")
+                for tc in tool_calls:
+                    result = self._execute_tool_call(tc, session_id)
+                    executed_tools.append({
+                        "name": tc.name,
+                        "arguments": tc.arguments,
+                        "result": result
+                    })
+                    # Yield tool call event
+                    yield {
+                        "type": "tool_call",
+                        "data": {
+                            "name": tc.name,
+                            "arguments": tc.arguments,
+                            "result": result
+                        }
+                    }
+
+            # Yield content in chunks for consistency with streaming interface
+            if content:
+                chunk_size = 100
+                for i in range(0, len(content), chunk_size):
+                    chunk = content[i:i+chunk_size]
+                    yield {"type": "content", "chunk": chunk, "done": False}
+
+            # Save assistant message
+            assistant_msg_id = f"msg-{uuid.uuid4()}"
+            self._save_message(
+                agent_id=self.agent_id,
+                session_id=session_id,
+                role='assistant',
+                content=content,
+                message_id=assistant_msg_id,
+                message_type=message_type
+            )
+
+            # Yield done event
+            yield {
+                "type": "done",
+                "result": {
+                    "response": content,
+                    "tool_calls": executed_tools
+                }
+            }
+            return
+
+
+        # CONSCIOUSNESS LOOP (STREAMING MODE)
+        print(f"\n{'='*60}")
+        print(f"🔄 ENTERING CONSCIOUSNESS LOOP (STREAMING)")
+        print(f"{'='*60}")
+        print(f"Max iterations: {self.max_tool_calls_per_turn}")
+        print(f"{'='*60}\n")
+
+        # STREAMING LOOP! 🚀
         tool_call_count = 0
         all_tool_calls = []
         final_response = ""
@@ -1626,25 +2033,42 @@ send_message: false
             # Call OpenRouter with STREAMING!
             try:
                 content_chunks = []
-                tool_calls_in_response = []
+                # Tool calls accumulator: dict keyed by index, storing accumulated tool call data
+                # During streaming, tool calls arrive in chunks with partial data
+                tool_calls_accumulator = {}  # {index: {"id": str, "name": str, "arguments": str}}
                 stream_finished = False
                 thinking_chunks = []  # For native reasoning models!
                 stream_usage = None  # Will contain usage info from final chunk
                 
                 print(f"📡 Starting stream for model: {model} (native reasoning: {is_native})")
-                
+
+                # For Mistral models, disable parallel tool calls (may help with streaming)
+                stream_kwargs = {}
+                if 'mistral' in model.lower():
+                    stream_kwargs['parallel_tool_calls'] = False
+                    print(f"🔧 Mistral detected - disabling parallel_tool_calls for better streaming")
+
                 async for chunk in self.openrouter.chat_completion_stream(
                     messages=messages,
                     model=model,
                     tools=tool_schemas,
+                    tool_choice="auto",
                     temperature=temperature,
-                    max_tokens=max_tokens
+                    max_tokens=max_tokens,
+                    **stream_kwargs
                 ):
                     # Parse chunk
                     if 'choices' in chunk and len(chunk['choices']) > 0:
                         delta = chunk['choices'][0].get('delta', {})
                         choice = chunk['choices'][0]
-                        
+
+                        # DEBUG: Log delta structure to see what Mistral is sending
+                        delta_keys = list(delta.keys()) if delta else []
+                        if delta_keys and delta_keys != ['content']:  # Don't spam for regular content
+                            print(f"🔍 Delta keys: {delta_keys}")
+                            if 'tool_calls' in delta:
+                                print(f"   ✅ Found tool_calls in delta: {delta['tool_calls']}")
+
                         # NATIVE REASONING: Extract reasoning chunks! 🤖
                         # For models like Kimi K2, reasoning comes in separate chunks
                         if is_native:
@@ -1698,10 +2122,34 @@ send_message: false
                                 final_response += content_chunk
                                 yield {"type": "content", "chunk": content_chunk, "done": False}
                         
-                        # Tool call chunk
+                        # Tool call chunk - accumulate properly!
+                        # During streaming, tool calls arrive as deltas with partial data:
+                        # - First chunk: {"id": "call_xxx", "index": 0, "type": "function", "function": {"name": "tool_name", "arguments": ""}}
+                        # - Subsequent chunks: {"index": 0, "function": {"arguments": "partial_args"}}
                         if 'tool_calls' in delta:
-                            # Tool calls come in chunks too
-                            tool_calls_in_response.append(delta['tool_calls'])
+                            for tc_delta in delta['tool_calls']:
+                                idx = tc_delta.get('index', 0)
+                                
+                                # Initialize accumulator for this tool call index if needed
+                                if idx not in tool_calls_accumulator:
+                                    tool_calls_accumulator[idx] = {
+                                        "id": "",
+                                        "name": "",
+                                        "arguments": ""
+                                    }
+                                
+                                # Accumulate id (usually comes in first chunk)
+                                if 'id' in tc_delta and tc_delta['id']:
+                                    tool_calls_accumulator[idx]["id"] = tc_delta['id']
+                                
+                                # Accumulate function name and arguments
+                                if 'function' in tc_delta:
+                                    func = tc_delta['function']
+                                    if 'name' in func and func['name']:
+                                        tool_calls_accumulator[idx]["name"] = func['name']
+                                    if 'arguments' in func:
+                                        # Arguments are streamed incrementally - concatenate!
+                                        tool_calls_accumulator[idx]["arguments"] += func['arguments']
                         
                         # Extract usage info (OpenRouter sends it in final chunk)
                         if 'usage' in chunk:
@@ -1712,7 +2160,24 @@ send_message: false
                         if choice.get('finish_reason'):
                             stream_finished = True
                             print(f"✅ Stream finished: {choice.get('finish_reason')}")
-                            
+
+                            # DEBUG: Check if tool_calls are in the final message (some models do this)
+                            if 'message' in choice:
+                                final_msg = choice.get('message', {})
+                                print(f"🔍 Final message keys: {list(final_msg.keys())}")
+                                if 'tool_calls' in final_msg:
+                                    print(f"   ⚠️  Found tool_calls in FINAL MESSAGE (not deltas): {len(final_msg['tool_calls'])} calls")
+                                    print(f"   Tool calls: {final_msg['tool_calls']}")
+                                    # Add them to accumulator now!
+                                    for i, tc in enumerate(final_msg['tool_calls']):
+                                        if i not in tool_calls_accumulator:
+                                            tool_calls_accumulator[i] = {
+                                                "id": tc.get('id', ''),
+                                                "name": tc.get('function', {}).get('name', ''),
+                                                "arguments": tc.get('function', {}).get('arguments', '')
+                                            }
+                                            print(f"   Added tool call from final message: {tool_calls_accumulator[i]['name']}")
+
                             # Final reasoning extraction (if available in final chunk)
                             if is_native and 'message' in choice:
                                 final_msg = choice.get('message', {})
@@ -1723,7 +2188,47 @@ send_message: false
                                         yield {"type": "thinking", "chunk": final_reasoning, "status": "thinking"}
                 
                 print(f"📊 Stream complete: {len(content_chunks)} content chunks, {len(thinking_chunks)} thinking chunks, final_response length: {len(final_response)}")
+                print(f"🔧 Tool calls accumulator: {len(tool_calls_accumulator)} tool calls")
+                if tool_calls_accumulator:
+                    for idx, tc_data in tool_calls_accumulator.items():
+                        print(f"   [{idx}] {tc_data['name']}: {tc_data['arguments'][:100]}...")
+
+                # DEEPSEEK V3.2: Check for proprietary tool format in streamed content
+                is_deepseek_format = self._uses_custom_tool_format(model)
+                has_tool_markers = '[[tool_call_begin]]' in final_response or '[[tool_sep]]' in final_response
+                print(f"🔍 DEEPSEEK CHECK: model={model}, is_deepseek={is_deepseek_format}, has_markers={has_tool_markers}")
                 
+                if final_response and is_deepseek_format and has_tool_markers:
+                    print(f"🔧 DEEPSEEK STREAMING: Detected proprietary tool format")
+                    clean_content, deepseek_tools = self._parse_deepseek_tool_calls(final_response)
+                    if deepseek_tools:
+                        # We found tool calls in the streamed content!
+                        # For streaming, we need to handle this differently - execute tools and continue
+                        print(f"   ✅ Parsed {len(deepseek_tools)} tool calls from stream")
+                        
+                        # Execute each tool call
+                        for tc in deepseek_tools:
+                            print(f"   🔧 Executing: {tc.name}")
+                            result = self._execute_tool_call(tc, session_id)
+                            all_tool_calls.append({
+                                "name": tc.name,
+                                "arguments": tc.arguments,
+                                "result": result
+                            })
+                            # Yield tool call event
+                            yield {
+                                "type": "tool_call",
+                                "data": {
+                                    "name": tc.name,
+                                    "arguments": tc.arguments,
+                                    "result": result
+                                }
+                            }
+                        
+                        # Update final_response to clean content (without tool markers)
+                        final_response = clean_content
+                        print(f"   📝 Clean response: {len(final_response)} chars")
+
                 # Extract token usage from stream (if available)
                 # NOTE: OpenRouter does NOT send usage info in streams! We need to estimate.
                 if stream_usage:
@@ -1792,54 +2297,48 @@ send_message: false
                 else:
                     thinking = None
                 
-                # Parse final tool calls
-                if tool_calls_in_response:
-                    # Reconstruct tool calls from streaming chunks
-                    # Streaming sends incremental deltas that need to be assembled
-                    print(f"🔧 Reconstructing {len(tool_calls_in_response)} tool call chunk(s)")
-
-                    reconstructed_calls = {}
-                    for chunk_list in tool_calls_in_response:
-                        for chunk in chunk_list:
-                            index = chunk.get('index', 0)
-
-                            if index not in reconstructed_calls:
-                                reconstructed_calls[index] = {
-                                    'id': chunk.get('id', ''),
-                                    'type': chunk.get('type', 'function'),
-                                    'function': {
-                                        'name': '',
-                                        'arguments': ''
-                                    }
+                # Parse final tool calls from accumulated data
+                # SKIP if we already have DeepSeek tool calls (they take precedence)
+                if tool_calls_accumulator and not (self._uses_custom_tool_format(model) and all_tool_calls):
+                    print(f"🔧 Reconstructing {len(tool_calls_accumulator)} tool calls from accumulator...")
+                    # Convert accumulated tool calls to OpenAI format
+                    reconstructed_tool_calls = []
+                    for idx in sorted(tool_calls_accumulator.keys()):
+                        tc_data = tool_calls_accumulator[idx]
+                        print(f"   Checking tool call [{idx}]: id={tc_data['id']}, name={tc_data['name']}")
+                        # Only include tool calls that have both id and name
+                        if tc_data["id"] and tc_data["name"]:
+                            reconstructed_tool_calls.append({
+                                "id": tc_data["id"],
+                                "type": "function",
+                                "function": {
+                                    "name": tc_data["name"],
+                                    "arguments": tc_data["arguments"]
                                 }
+                            })
+                            print(f"   ✅ Added tool call: {tc_data['name']}")
+                        else:
+                            print(f"   ❌ Skipped incomplete tool call (missing id or name)")
 
-                            # Update ID if present
-                            if 'id' in chunk:
-                                reconstructed_calls[index]['id'] = chunk['id']
-
-                            # Update function data
-                            if 'function' in chunk:
-                                func = chunk['function']
-                                if 'name' in func:
-                                    reconstructed_calls[index]['function']['name'] = func['name']
-                                if 'arguments' in func:
-                                    reconstructed_calls[index]['function']['arguments'] += func['arguments']
-
-                    # Convert to list and parse
-                    reconstructed_list = list(reconstructed_calls.values())
-                    print(f"🔧 Reconstructed {len(reconstructed_list)} tool call(s) from stream")
-
-                    for i, call in enumerate(reconstructed_list):
-                        print(f"   {i+1}. {call['function']['name']}(args: {len(call['function']['arguments'])} chars)")
-
-                    tool_calls = self.openrouter.parse_tool_calls({
-                        'choices': [{
-                            'message': {
-                                'tool_calls': reconstructed_list
-                            }
-                        }]
-                    })
+                    # Parse the reconstructed tool calls
+                    if reconstructed_tool_calls:
+                        print(f"🔧 Parsing {len(reconstructed_tool_calls)} reconstructed tool calls...")
+                        tool_calls = self.openrouter.parse_tool_calls({
+                            'choices': [{
+                                'message': {
+                                    'tool_calls': reconstructed_tool_calls
+                                }
+                            }]
+                        })
+                        print(f"✅ Successfully reconstructed {len(tool_calls)} tool call(s) from stream")
+                    else:
+                        print(f"⚠️  No valid tool calls to reconstruct (all missing id or name)")
+                        tool_calls = []
                 else:
+                    if self._uses_custom_tool_format(model) and all_tool_calls:
+                        print(f"ℹ️  Skipping tool call reconstruction (using DeepSeek format instead)")
+                    else:
+                        print(f"ℹ️  No tool calls in accumulator")
                     tool_calls = []
                 
                 # If we have content and no tools, we're done!
