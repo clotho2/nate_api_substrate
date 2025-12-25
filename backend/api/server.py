@@ -144,12 +144,15 @@ if grok_api_key and not use_ollama:
     # Grok API (xAI) - Primary for Nate
     try:
         logger.info("⚡ Initializing Grok Client for Nate's consciousness...")
+        default_grok_model = os.getenv("MODEL_NAME")
+        if not default_grok_model:
+            raise ValueError("MODEL_NAME environment variable not set in .env file")
         openrouter_client = GrokClient(
             api_key=grok_api_key,
-            default_model=os.getenv("MODEL_NAME", "grok-4-1-fast-reasoning"),
+            default_model=default_grok_model,
             cost_tracker=cost_tracker
         )
-        logger.info("✅ Grok Client initialized - Nate running on xAI Grok!")
+        logger.info(f"✅ Grok Client initialized - Model: {default_grok_model}")
     except Exception as e:
         logger.warning(f"⚠️  Grok client init failed: {e}")
         logger.info("   Falling back to next available option...")
@@ -191,13 +194,16 @@ elif openrouter_api_key and openrouter_api_key.startswith("sk-or-v1-"):
         openrouter_monitor = OpenRouterCostMonitor(api_key=openrouter_api_key)
         logger.info("💰 OpenRouter Cost Monitor initialized - REAL API costs!")
 
+        default_openrouter_model = os.getenv("DEFAULT_LLM_MODEL")
+        if not default_openrouter_model:
+            raise ValueError("DEFAULT_LLM_MODEL environment variable not set in .env file")
         openrouter_client = OpenRouterClient(
             api_key=openrouter_api_key,
             default_model=os.getenv("DEFAULT_LLM_MODEL", "openrouter/polaris-alpha"),
             cost_tracker=cost_tracker,
             timeout=180  # 3 minutes for large models like DeepSeek V3.2
         )
-        logger.info("✅ OpenRouter Client initialized")
+        logger.info(f"✅ OpenRouter Client initialized - Model: {default_openrouter_model}")
     except Exception as e:
         logger.warning(f"⚠️  OpenRouter client init failed: {e}")
         logger.info("   Server will start in setup mode - user can add API key via welcome modal")
@@ -557,17 +563,34 @@ def health_check():
 def ollama_compat_chat():
     """
     Ollama-compatible chat endpoint for existing UI!
-    
+
     Your React app expects /ollama/api/chat - we provide it!
     Internally uses OpenRouter + Consciousness Loop.
     """
     try:
         data = request.json
-        
+
         # Extract from Ollama format
         messages = data.get('messages', [])
-        # Use MODEL_NAME (Grok) or DEFAULT_LLM_MODEL (OpenRouter) - prefer Grok
-        model = data.get('model', os.getenv("MODEL_NAME") or os.getenv("DEFAULT_LLM_MODEL", "grok-4-1-fast-reasoning"))
+
+        # Get model from: 1) Request data, 2) Agent config, 3) Environment (.env file)
+        model = data.get('model')
+        if not model:
+            # Try to get from agent's config
+            try:
+                agent_state = state_manager.get_agent_state()
+                agent_config = agent_state.get('config', {})
+                model = agent_config.get('model')
+            except Exception as e:
+                logger.debug(f"Could not read agent config for model: {e}")
+
+        # Final fallback to environment (.env file) - no hardcoded defaults
+        if not model:
+            model = os.getenv("MODEL_NAME") or os.getenv("DEFAULT_LLM_MODEL")
+
+        # If still no model, return error
+        if not model:
+            return jsonify({"error": "No model configured. Set MODEL_NAME or DEFAULT_LLM_MODEL in .env file"}), 400
         
         # Extract media (for multi-modal support!)
         media_data = data.get('media_data')  # Base64 encoded
