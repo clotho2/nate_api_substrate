@@ -146,9 +146,26 @@ class IntegrationTools:
             Dict with status and result
         """
         try:
-            result = _send_voice_message(**kwargs)
+            # Debug: Log the actual kwargs received
+            print(f"🔍 send_voice_message called with kwargs: {list(kwargs.keys())}")
+
+            # Filter to only valid parameters to prevent errors from extra keys
+            valid_params = {'message', 'target', 'target_type'}
+            filtered_kwargs = {k: v for k, v in kwargs.items() if k in valid_params}
+
+            if filtered_kwargs != kwargs:
+                extra_keys = set(kwargs.keys()) - valid_params
+                print(f"⚠️  Filtered out extra keys: {extra_keys}")
+
+            result = _send_voice_message(**filtered_kwargs)
             return result
         except Exception as e:
+            # Log full traceback for debugging
+            import traceback
+            print(f"❌ send_voice_message error:")
+            print(f"   kwargs keys: {list(kwargs.keys())}")
+            print(f"   kwargs: {kwargs}")
+            traceback.print_exc()
             return {
                 "status": "error",
                 "message": f"Voice message error: {str(e)}"
