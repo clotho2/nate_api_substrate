@@ -30,7 +30,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core.state_manager import StateManager
 from core.openrouter_client import OpenRouterClient
-from core.grok_client import GrokClient  # ⚡ Nate's Grok integration!
+from core.grok_client import GrokClient  # ⚡ Grok API integration!
 from core.memory_system import MemorySystem
 from core.context_window_calculator import ContextWindowCalculator
 from core.cost_tracker import CostTracker
@@ -133,20 +133,20 @@ rate_limiter = RateLimiter(max_requests=5, window_seconds=10)  # Allow burst of 
 openrouter_monitor = None
 openrouter_client = None
 
-# ⚡ NATE'S GROK INTEGRATION - Priority: Grok > OpenRouter > Setup Mode
+# ⚡ GROK INTEGRATION - Priority: Grok > OpenRouter > Setup Mode
 grok_api_key = os.getenv("GROK_API_KEY", "")
 openrouter_api_key = os.getenv("OPENROUTER_API_KEY", "")
 
 if grok_api_key:
-    # Grok API (xAI) - Primary for Nate
+    # Grok API (xAI) - Primary
     try:
-        logger.info("⚡ Initializing Grok Client for Nate's consciousness...")
+        logger.info("⚡ Initializing Grok Client for AI consciousness...")
         openrouter_client = GrokClient(
             api_key=grok_api_key,
             default_model=os.getenv("MODEL_NAME", "grok-4-1-fast-reasoning"),
             cost_tracker=cost_tracker
         )
-        logger.info("✅ Grok Client initialized - Nate running on xAI Grok!")
+        logger.info("✅ Grok Client initialized - AI running on xAI Grok!")
     except Exception as e:
         logger.warning(f"⚠️  Grok client init failed: {e}")
         logger.info("   Server will start in setup mode - user can add API key via welcome modal")

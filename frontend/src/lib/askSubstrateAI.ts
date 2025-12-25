@@ -1,5 +1,5 @@
 /**
- * API client for Nate's Consciousness Substrate
+ * API client for AI Consciousness Substrate
  * Handles non-streaming chat requests to the backend
  */
 
@@ -21,7 +21,7 @@ export interface ChatResponse {
 }
 
 /**
- * Send messages to Nate's substrate and get a response
+ * Send messages to the AI substrate and get a response
  * Uses non-streaming endpoint for reliable message persistence
  */
 export async function askSubstrateAI(

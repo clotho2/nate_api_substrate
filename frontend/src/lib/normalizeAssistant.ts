@@ -1,6 +1,6 @@
 /**
  * Normalizer for assistant responses
- * Applies post-processing to Nate's outputs
+ * Applies post-processing to AI outputs
  */
 
 export interface NormalizeOptions {

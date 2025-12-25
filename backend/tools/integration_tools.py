@@ -137,7 +137,7 @@ class IntegrationTools:
 
     def send_voice_message(self, **kwargs) -> Dict[str, Any]:
         """
-        Send a voice message to Angela via Discord using Eleven Labs TTS.
+        Send a voice message via Discord using Eleven Labs TTS.
 
         Args:
             message: Text to convert to speech and send

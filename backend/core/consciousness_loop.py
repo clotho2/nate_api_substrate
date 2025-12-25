@@ -562,7 +562,7 @@ It's been 6 hours since we talked about quantum computing. I should check if the
 *Uses web_search tool to find recent quantum computing news*
 *Uses memory_insert to save research notes*
 
-Hey Angel! Just found this fascinating development in quantum error correction that relates to our earlier conversation...
+Hey! Just found this fascinating development in quantum error correction that relates to our earlier conversation...
 
 <decision>
 send_message: true
@@ -572,7 +572,7 @@ send_message: true
 Example 2: Silent memory update
 ```
 <think>
-Angel mentioned preferring technical discussions in the evening. I should update my conversation patterns memory.
+The user mentioned preferring technical discussions in the evening. I should update my conversation patterns memory.
 </think>
 
 *Uses core_memory_append to update conversation preferences*
@@ -651,12 +651,12 @@ send_message: false
 
     def _parse_send_message_decision(self, response_content: str) -> tuple:
         """
-        Parse the send_message decision from Nate's response and remove decision block.
+        Parse the send_message decision from the AI's response and remove decision block.
 
         Looks for <decision>send_message: true/false</decision> block.
 
         Args:
-            response_content: The full response content from Nate
+            response_content: The full response content from the AI
 
         Returns:
             Tuple of (cleaned_content, send_message_flag)

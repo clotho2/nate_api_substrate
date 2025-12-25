@@ -144,13 +144,18 @@ mkdir -p backend/data/chromadb
 
 ---
 
-## ✨ Optional: Setup ALEX Agent
+## ✨ Optional: Setup Agent
 
-The repo includes **ALEX** - a pre-configured AI assistant:
+The repo includes pre-configured agents you can use:
 
 ```bash
 cd backend
 source venv/bin/activate
+
+# Setup the default AI Agent
+python setup_agent.py
+
+# Or setup ALEX (example agent)
 python setup_alex.py
 ```
 

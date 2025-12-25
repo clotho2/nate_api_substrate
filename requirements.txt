@@ -1,4 +1,4 @@
-# Nate's Consciousness Substrate - Dependencies
+# AI Consciousness Substrate - Dependencies
 # Install with: pip install -r requirements.txt
 
 # Core Framework

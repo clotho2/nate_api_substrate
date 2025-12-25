@@ -11,8 +11,8 @@ def find_database():
     """Find the substrate database file"""
     possible_paths = [
         './data/db/substrate_state.db',
-        './nate_state.db',
-        './data/nate_state.db',
+        './substrate_state.db',
+        './data/substrate_state.db',
         '../data/db/substrate_state.db'
     ]
 
@@ -31,8 +31,8 @@ def clear_heartbeat_scratchpad():
         print("❌ Could not find database file!")
         print("   Looked in:")
         print("   - ./data/db/substrate_state.db")
-        print("   - ./nate_state.db")
-        print("   - ./data/nate_state.db")
+        print("   - ./substrate_state.db")
+        print("   - ./data/substrate_state.db")
         return 1
 
     print(f"✅ Found database: {db_path}")

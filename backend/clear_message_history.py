@@ -9,7 +9,7 @@ WHAT GETS CLEARED:
 - Conversation message history (chat back-and-forth)
 
 WHAT IS PRESERVED:
-- Memory blocks (persona, Angela info)
+- Memory blocks (persona, user info)
 - Archival memories (long-term searchable storage)
 - Agent configuration
 - All tools and functionality
@@ -86,7 +86,7 @@ def clear_message_history():
     print("✅ MESSAGE HISTORY CLEARED!")
     print("="*60)
     print("\nWhat was preserved:")
-    print("  ✅ Memory blocks (persona, Angela info)")
+    print("  ✅ Memory blocks (persona, user info)")
     print("  ✅ Archival memories (searchable long-term storage)")
     print("  ✅ Agent configuration")
     print("  ✅ All tools and functionality")
