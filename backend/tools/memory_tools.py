@@ -697,6 +697,13 @@ class MemoryTools:
         """
         return self.integrations.send_voice_message(**kwargs)
 
+    def send_text_message(self, **kwargs) -> Dict[str, Any]:
+        """
+        Send text message tool (wrapper).
+        Send text messages via Discord.
+        """
+        return self.integrations.send_text_message(**kwargs)
+
     def web_search(self, **kwargs) -> Dict[str, Any]:
         """
         Web search tool (wrapper).

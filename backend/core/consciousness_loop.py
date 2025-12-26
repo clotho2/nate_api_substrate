@@ -751,6 +751,9 @@ send_message: false
             elif tool_name == "send_voice_message":
                 result = self.tools.send_voice_message(**arguments)
 
+            elif tool_name == "send_text_message":
+                result = self.tools.send_text_message(**arguments)
+
             elif tool_name == "web_search":
                 result = self.tools.web_search(**arguments)
             
