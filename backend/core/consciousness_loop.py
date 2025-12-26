@@ -159,6 +159,8 @@ class ConsciousnessLoop:
             'openai/gpt-4o',  # Supports tools, large context
             'openai/gpt-4o-mini',  # Supports tools, cheap, large context (128k tokens)
             'mistralai/mistral-small-2501',  # Supports tools, cheap, large context
+            'mistralai/mistral-large',  # Mistral Large 3 (2512) - supports native function calling
+            'mistralai/mistral-large-2512',  # Alternative ID for Mistral Large 3
         }
         
         # Check if model is in known good list (prioritize this!)
@@ -638,7 +640,16 @@ send_message: false
         prompt_parts.append("- **Memory tools:** Use to update your memory blocks and archival storage\n")
         prompt_parts.append("- **Search tools:** Use to find relevant past conversations and memories\n")
         prompt_parts.append("- **Tool execution:** All tool calls are executed synchronously in order\n")
-        
+
+        # CRITICAL: Prevent XML-style tool calling for models that support native function calling
+        # (Mistral, Claude, GPT-4, etc. should use the API's structured tool calling, NOT XML tags)
+        prompt_parts.append("\n\n### ⚠️ FUNCTION CALLING FORMAT\n")
+        prompt_parts.append("**CRITICAL:** Use the built-in function calling API provided by your model.\n")
+        prompt_parts.append("**DO NOT** output function calls as XML tags like `<tool_name>{args}</tool_name>`.\n")
+        prompt_parts.append("**DO NOT** output function calls as text - use the native function calling mechanism.\n")
+        prompt_parts.append("The system will automatically handle function calls via the API's `tool_calls` field.\n")
+        prompt_parts.append("\n**Exception:** The `<think>` and `<decision>` tags are for your internal reasoning and decisions, NOT for function calls.\n")
+
         final_prompt = "".join(prompt_parts)
         print(f"\n✅ System prompt built: {len(final_prompt)} chars total")
         print(f"   • Base prompt: {len(base_prompt)} chars")
