@@ -3,7 +3,7 @@ UNIFIED DISCORD TOOL - Complete Discord Integration for Letta
 ============================================================
 
 This tool combines core Discord functionality into one powerful tool:
-✅ Send messages (DMs and channels)
+✅ Send messages (DMs and channels) - via Discord API or bot HTTP API
 ✅ Read messages (DMs and channels) with advanced filtering
 ✅ Guild/Server management (list guilds)
 ✅ Channel management (list channels)
@@ -33,8 +33,13 @@ USAGE EXAMPLES:
 ---------------
 
 1. SEND MESSAGES:
+   # Via Discord native API (direct):
    discord_tool(action="send_message", message="Hello!", target="1234567890", target_type="channel")
    discord_tool(action="send_message", message="Hi there!", target="1234567890", target_type="user")
+
+   # Via Discord bot HTTP API (through bot server):
+   discord_tool(action="send_text_via_bot", message="Hello!", target="1234567890", target_type="channel")
+   discord_tool(action="send_text_via_bot", message="Hi there!")  # Uses DEFAULT_USER_ID
 
 2. READ MESSAGES:
    # Basic reading
@@ -185,16 +190,19 @@ def discord_tool(
 ):
     """
     Unified Discord tool that handles core Discord operations.
-    
+
     Args:
-        action: The action to perform (send_message, read_messages,
+        action: The action to perform (send_message, send_text_via_bot, read_messages,
                 list_guilds, list_channels, create_task, delete_task, list_tasks,
                 manage_tasks - BATCH task operations,
                 execute_batch - ULTIMATE POWER: Execute ANY combination in ONE call!)
         ... (other parameters depend on action)
-    
+
     POWER USER TIP: Use execute_batch to combine multiple operations and save API credits!
     Example: Read messages + List guilds + Manage tasks = 1 API call instead of 3!
+
+    NOTE: send_message uses Discord's native API directly (fast, requires bot token).
+          send_text_via_bot routes through your Discord bot's HTTP API (requires bot server running).
     """
     
     # Configuration
@@ -208,9 +216,15 @@ def discord_tool(
     
     try:
         if action == "send_message":
-            return _send_message(DISCORD_BOT_TOKEN, message, target, target_type, 
+            return _send_message(DISCORD_BOT_TOKEN, message, target, target_type,
                                mention_users, ping_everyone, ping_here)
-        
+
+        elif action == "send_text_via_bot":
+            # Route through Discord bot's HTTP API instead of Discord native API
+            DISCORD_BOT_URL = os.getenv("DISCORD_BOT_URL", "http://localhost:3001")
+            return _send_text_via_bot(DISCORD_BOT_URL, message, target, target_type,
+                                     mention_users, ping_everyone, ping_here)
+
         elif action == "read_messages":
             return _read_messages(DISCORD_BOT_TOKEN, target, target_type, limit, time_filter, timezone, show_both, search_keywords, start_time, end_time)
         
@@ -354,6 +368,108 @@ def _send_message(bot_token, message, target, target_type, mention_users=None, p
         "target_type": target_type,
         "mentions_added": bool(mentions_text)
     }
+
+def _send_text_via_bot(bot_url, message, target, target_type, mention_users=None, ping_everyone=False, ping_here=False):
+    """Send a text message via Discord bot's HTTP API (alternative to native Discord API)."""
+    # Get default target if not provided
+    if not target:
+        target = os.getenv("DEFAULT_USER_ID", "")
+        if not target:
+            return {
+                "status": "error",
+                "message": "No target specified and DEFAULT_USER_ID not configured"
+            }
+
+    # Validate message
+    if not message or not message.strip():
+        return {
+            "status": "error",
+            "message": "Message cannot be empty"
+        }
+
+    # Prepare the request to Discord bot API endpoint
+    endpoint = f"{bot_url.rstrip('/')}/api/send-message"
+    headers = {
+        "Content-Type": "application/json"
+    }
+
+    payload = {
+        "message": message.strip(),
+        "target": target,
+        "target_type": target_type or "auto"
+    }
+
+    # Add optional parameters if provided
+    if mention_users:
+        payload["mention_users"] = mention_users
+    if ping_everyone:
+        payload["ping_everyone"] = ping_everyone
+    if ping_here:
+        payload["ping_here"] = ping_here
+
+    try:
+        # Send request to Discord bot
+        response = requests.post(
+            endpoint,
+            headers=headers,
+            json=payload,
+            timeout=30
+        )
+
+        # Handle response
+        if response.status_code == 200:
+            result = response.json()
+            chunks = result.get("chunks", 1)
+            message_preview = message[:50] + '...' if len(message) > 50 else message
+
+            return {
+                "status": "success",
+                "message": f"Text message sent successfully ({chunks} chunk{'s' if chunks > 1 else ''}): '{message_preview}'",
+                "message_ids": result.get("message_ids", []),
+                "chunks": chunks
+            }
+        elif response.status_code == 400:
+            error_data = response.json()
+            return {
+                "status": "error",
+                "message": f"Invalid request: {error_data.get('error', 'Unknown error')}"
+            }
+        elif response.status_code == 429:
+            return {
+                "status": "error",
+                "message": "Rate limited. Please wait before sending more messages."
+            }
+        elif response.status_code == 503:
+            return {
+                "status": "error",
+                "message": "Discord bot service unavailable. Please try again later."
+            }
+        else:
+            return {
+                "status": "error",
+                "message": f"Failed to send text message. Status: {response.status_code}, Error: {response.text}"
+            }
+
+    except requests.exceptions.Timeout:
+        return {
+            "status": "error",
+            "message": "Request timeout. The Discord bot took too long to respond (>30s)."
+        }
+    except requests.exceptions.ConnectionError:
+        return {
+            "status": "error",
+            "message": f"Connection error. Could not reach Discord bot at {bot_url}. Is it running?"
+        }
+    except requests.exceptions.RequestException as e:
+        return {
+            "status": "error",
+            "message": f"Request error: {str(e)}"
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Unexpected error: {str(e)}"
+        }
 
 def _read_messages(bot_token, target, target_type, limit, time_filter, timezone, show_both, search_keywords=None, start_time=None, end_time=None):
     """Read messages from Discord (DM or channel) with advanced filtering and smart pagination."""
@@ -1185,6 +1301,17 @@ def _execute_batch(operations, bot_token, tasks_channel_id, default_user_id):
             if action == "send_message":
                 result = _send_message(
                     bot_token,
+                    operation.get("message"),
+                    operation.get("target"),
+                    operation.get("target_type"),
+                    operation.get("mention_users"),
+                    operation.get("ping_everyone", False),
+                    operation.get("ping_here", False)
+                )
+            elif action == "send_text_via_bot":
+                bot_url = os.getenv("DISCORD_BOT_URL", "http://localhost:3001")
+                result = _send_text_via_bot(
+                    bot_url,
                     operation.get("message"),
                     operation.get("target"),
                     operation.get("target_type"),
