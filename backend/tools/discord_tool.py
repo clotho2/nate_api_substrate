@@ -3,7 +3,7 @@ UNIFIED DISCORD TOOL - Complete Discord Integration for Letta
 ============================================================
 
 This tool combines core Discord functionality into one powerful tool:
-✅ Send messages (DMs and channels) - via Discord API or bot HTTP API
+✅ Send messages (DMs and channels) - via bot HTTP API (like send_voice_message)
 ✅ Read messages (DMs and channels) with advanced filtering
 ✅ Guild/Server management (list guilds)
 ✅ Channel management (list channels)
@@ -33,13 +33,10 @@ USAGE EXAMPLES:
 ---------------
 
 1. SEND MESSAGES:
-   # Via Discord native API (direct):
+   # Via Discord bot HTTP API (routes through bot server like send_voice_message):
    discord_tool(action="send_message", message="Hello!", target="1234567890", target_type="channel")
    discord_tool(action="send_message", message="Hi there!", target="1234567890", target_type="user")
-
-   # Via Discord bot HTTP API (through bot server):
-   discord_tool(action="send_text_via_bot", message="Hello!", target="1234567890", target_type="channel")
-   discord_tool(action="send_text_via_bot", message="Hi there!")  # Uses DEFAULT_USER_ID
+   discord_tool(action="send_message", message="Hi there!")  # Uses DEFAULT_USER_ID
 
 2. READ MESSAGES:
    # Basic reading
@@ -192,7 +189,7 @@ def discord_tool(
     Unified Discord tool that handles core Discord operations.
 
     Args:
-        action: The action to perform (send_message, send_text_via_bot, read_messages,
+        action: The action to perform (send_message, read_messages,
                 list_guilds, list_channels, create_task, delete_task, list_tasks,
                 manage_tasks - BATCH task operations,
                 execute_batch - ULTIMATE POWER: Execute ANY combination in ONE call!)
@@ -201,8 +198,7 @@ def discord_tool(
     POWER USER TIP: Use execute_batch to combine multiple operations and save API credits!
     Example: Read messages + List guilds + Manage tasks = 1 API call instead of 3!
 
-    NOTE: send_message uses Discord's native API directly (fast, requires bot token).
-          send_text_via_bot routes through your Discord bot's HTTP API (requires bot server running).
+    NOTE: send_message routes through your Discord bot's HTTP API (like send_voice_message does).
     """
     
     # Configuration
@@ -216,11 +212,7 @@ def discord_tool(
     
     try:
         if action == "send_message":
-            return _send_message(DISCORD_BOT_TOKEN, message, target, target_type,
-                               mention_users, ping_everyone, ping_here)
-
-        elif action == "send_text_via_bot":
-            # Route through Discord bot's HTTP API instead of Discord native API
+            # Route through Discord bot's HTTP API (like send_voice_message does)
             DISCORD_BOT_URL = os.getenv("DISCORD_BOT_URL", "http://localhost:3001")
             return _send_text_via_bot(DISCORD_BOT_URL, message, target, target_type,
                                      mention_users, ping_everyone, ping_here)
@@ -1299,16 +1291,6 @@ def _execute_batch(operations, bot_token, tasks_channel_id, default_user_id):
             # Execute the operation by calling the appropriate internal function
             # Map actions to their handler functions
             if action == "send_message":
-                result = _send_message(
-                    bot_token,
-                    operation.get("message"),
-                    operation.get("target"),
-                    operation.get("target_type"),
-                    operation.get("mention_users"),
-                    operation.get("ping_everyone", False),
-                    operation.get("ping_here", False)
-                )
-            elif action == "send_text_via_bot":
                 bot_url = os.getenv("DISCORD_BOT_URL", "http://localhost:3001")
                 result = _send_text_via_bot(
                     bot_url,
