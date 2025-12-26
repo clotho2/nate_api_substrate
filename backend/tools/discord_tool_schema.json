@@ -1,6 +1,6 @@
 {
   "name": "discord_tool",
-  "description": "Unified Discord tool for complete Discord control: send/read messages (DMs and channels), manage guilds/channels, schedule tasks. Supports advanced time filtering (today, yesterday, specific dates, weekdays), keyword search, batch operations, and smart pagination. Use execute_batch to combine multiple operations in ONE call to save API credits!",
+  "description": "Unified Discord tool for complete Discord control: send/read messages (DMs and channels via native API or bot HTTP API), manage guilds/channels, schedule tasks. Supports advanced time filtering (today, yesterday, specific dates, weekdays), keyword search, batch operations, and smart pagination. Use execute_batch to combine multiple operations in ONE call to save API credits!",
   "parameters": {
     "type": "object",
     "properties": {
@@ -9,6 +9,7 @@
         "description": "Action to perform",
         "enum": [
           "send_message",
+          "send_text_via_bot",
           "read_messages",
           "list_guilds",
           "list_channels",
@@ -21,11 +22,11 @@
       },
       "message": {
         "type": "string",
-        "description": "Message content to send (for send_message action). Auto-chunks messages over 2000 characters."
+        "description": "Message content to send (for send_message and send_text_via_bot actions). Auto-chunks messages over 2000 characters."
       },
       "target": {
         "type": "string",
-        "description": "Target user ID or channel ID (for send_message/read_messages). Auto-detects if target_type not specified."
+        "description": "Target user ID or channel ID (for send_message/send_text_via_bot/read_messages). Auto-detects if target_type not specified."
       },
       "target_type": {
         "type": "string",
