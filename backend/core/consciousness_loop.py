@@ -691,6 +691,69 @@ send_message: false
         print(f"⚠️  No heartbeat decision block found - defaulting to send_message = true")
         return response_content, True
 
+    def _parse_mistral_xml_tool_calls(self, content: str) -> tuple:
+        """
+        Parse Mistral's XML-formatted tool calls from content.
+        Mistral Large 3 outputs tool calls as XML tags when it sees XML in the system prompt:
+        <tool_name>{"arg": "value"}</tool_name>
+
+        Returns: (cleaned_content, tool_calls_list)
+        """
+        import re
+        import json
+
+        tool_calls = []
+        clean_content = content
+
+        # Get all available tool names to validate against
+        tool_names = set()
+        if hasattr(self, 'tools'):
+            tool_schemas = self.tools.get_tool_schemas()
+            for schema in tool_schemas:
+                tool_names.add(schema.get('function', {}).get('name', ''))
+
+        # Find all XML tag pairs and extract content
+        # This approach handles nested JSON properly by extracting everything between tags first
+        found_calls = []
+        for tool_name in tool_names:
+            # Find all occurrences of this tool
+            pattern = f'<{tool_name}>(.*?)</{tool_name}>'
+            for match in re.finditer(pattern, content, re.DOTALL):
+                found_calls.append((tool_name, match.group(1).strip(), match.group(0)))
+
+        if found_calls:
+            print(f"🔍 MISTRAL XML FORMAT: Found {len(found_calls)} potential tool call(s)")
+
+            for i, (tool_name, arguments_str, full_match) in enumerate(found_calls):
+                try:
+                    # Parse JSON arguments
+                    arguments = json.loads(arguments_str)
+
+                    # Create ToolCall object
+                    from core.openrouter_client import ToolCall
+                    tool_call = ToolCall(
+                        id=f"mistral_xml_{i}",
+                        name=tool_name,
+                        arguments=arguments
+                    )
+                    tool_calls.append(tool_call)
+                    print(f"   ✅ Parsed: {tool_name}({json.dumps(arguments)[:100]}...)")
+
+                    # Remove this tool call from content (remove the full XML tag)
+                    clean_content = clean_content.replace(full_match, '', 1)
+                except json.JSONDecodeError as e:
+                    print(f"   ⚠️  Failed to parse JSON arguments for {tool_name}: {e}")
+                    print(f"       Arguments string: {arguments_str[:200]}")
+
+        # Clean up extra whitespace
+        clean_content = re.sub(r'\n{3,}', '\n\n', clean_content)
+        clean_content = clean_content.strip()
+
+        if tool_calls:
+            print(f"   📝 Clean content remaining: {len(clean_content)} chars")
+
+        return clean_content, tool_calls
+
     def _execute_tool_call(
         self,
         tool_call: ToolCall,
@@ -1224,7 +1287,17 @@ send_message: false
             # 3. No content + No tools = ERROR ❌
             
             print(f"\n🤔 DECISION:")
-            
+
+            # MISTRAL XML PARSER: Check if Mistral output tool calls as XML tags
+            is_mistral = 'mistral' in model.lower()
+            if content and not tool_calls and is_mistral and tool_schemas:
+                print(f"🔍 MISTRAL CHECK: Checking for XML-formatted tool calls in response")
+                clean_content, mistral_tools = self._parse_mistral_xml_tool_calls(content)
+                if mistral_tools:
+                    print(f"   ✅ Parsed {len(mistral_tools)} XML tool call(s)")
+                    tool_calls = mistral_tools
+                    content = clean_content
+
             if content and not tool_calls:
                 # ✅ FINAL ANSWER - model responded naturally!
                 print(f"✅ FINAL ANSWER - Model responded with content, no tools needed!")
@@ -1804,7 +1877,17 @@ send_message: false
                     })
                 else:
                     tool_calls = []
-                
+
+                # MISTRAL XML PARSER: Check if Mistral output tool calls as XML tags (streaming)
+                is_mistral = 'mistral' in model.lower()
+                if final_response and not tool_calls and is_mistral:
+                    print(f"🔍 MISTRAL CHECK (streaming): Checking for XML-formatted tool calls")
+                    clean_content, mistral_tools = self._parse_mistral_xml_tool_calls(final_response)
+                    if mistral_tools:
+                        print(f"   ✅ Parsed {len(mistral_tools)} XML tool call(s) from stream")
+                        tool_calls = mistral_tools
+                        final_response = clean_content
+
                 # If we have content and no tools, we're done!
                 if final_response and not tool_calls:
                     print(f"✅ Response complete: {final_response[:100]}...")
