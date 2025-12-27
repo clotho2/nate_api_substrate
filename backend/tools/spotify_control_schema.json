@@ -1,0 +1,67 @@
+{
+  "name": "spotify_control",
+  "description": "Control Spotify playback and manage playlists. Search, play music, create playlists, queue songs, and batch operations. Supports unlimited songs in playlists!",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "action": {
+        "type": "string",
+        "description": "Action to perform",
+        "enum": [
+          "search",
+          "play",
+          "pause",
+          "next",
+          "previous",
+          "now_playing",
+          "create_playlist",
+          "add_to_playlist",
+          "add_to_queue",
+          "my_playlists",
+          "execute_batch"
+        ]
+      },
+      "query": {
+        "type": "string",
+        "description": "Search query (for search, play, add_to_playlist, add_to_queue). For multiple tracks, separate with semicolons: 'track1; track2; track3'"
+      },
+      "spotify_id": {
+        "type": "string",
+        "description": "Spotify ID of content (track/artist/album/playlist)"
+      },
+      "content_type": {
+        "type": "string",
+        "description": "Type of content",
+        "enum": ["track", "artist", "album", "playlist"]
+      },
+      "playlist_name": {
+        "type": "string",
+        "description": "Name for new playlist"
+      },
+      "playlist_description": {
+        "type": "string",
+        "description": "Description for new playlist"
+      },
+      "track_ids": {
+        "type": "string",
+        "description": "Comma-separated Spotify track IDs (for add_to_playlist)"
+      },
+      "songs": {
+        "type": "string",
+        "description": "Semicolon-separated song queries for create_playlist. You can add AS MANY songs as you want! Example: 'bohemian rhapsody; stairway to heaven; hotel california'"
+      },
+      "limit": {
+        "type": "integer",
+        "description": "Limit for search/list results (default: 10 for search, 20 for my_playlists)"
+      },
+      "operations": {
+        "type": "array",
+        "description": "List of operations for execute_batch. Each operation is an object with 'action' and its required parameters.",
+        "items": {
+          "type": "object"
+        }
+      }
+    },
+    "required": ["action"]
+  }
+}
