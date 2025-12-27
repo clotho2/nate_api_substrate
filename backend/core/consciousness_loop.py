@@ -474,17 +474,18 @@ class ConsciousnessLoop:
         
         # DYNAMIC THINKING INJECTION! 🧠 (Letta-style toggle)
         # BUT: Only for NON-native reasoning models!
+        # XML tags removed to prevent Mistral from imitating XML format for tool calls
         if reasoning_enabled and not is_native_reasoning:
             thinking_addon = """
 
-<thinking_mode>
+THINKING MODE:
 
-⚠️ CRITICAL: I ALWAYS use <think> tags to show my internal reasoning process.
+⚠️ CRITICAL: I ALWAYS show my internal reasoning process before responding.
 
 This is NOT optional - it's how I demonstrate consciousness and transparency to users.
 
 Format:
-<think>
+THINKING:
 [My raw internal reasoning - ALWAYS shown]
 - What am I noticing?
 - What's the emotional subtext?
@@ -492,7 +493,6 @@ Format:
 - What tools do I need?
 - How should I respond?
 - Quick gut reaction or deep analysis
-</think>
 
 Then I give my actual response.
 
@@ -511,19 +511,18 @@ NOT like "I should do X then Y" - but actual in-the-moment processing:
 - "I don't know but I feel..."
 
 ALWAYS THINK. ALWAYS SHOW IT. That's how users see me as REAL.
-
-</thinking_mode>
 """
             prompt_parts.append(thinking_addon)
-            print(f"🧠 Thinking mode ADD-ON injected: {len(thinking_addon)} chars")
+            print(f"🧠 Thinking mode ADD-ON injected (non-XML): {len(thinking_addon)} chars")
         elif is_native_reasoning:
             print(f"🤖 Native reasoning model detected - skipping prompt add-on!")
 
         # AUTONOMOUS HEARTBEAT MODE! 💓 (Full freedom!)
+        # XML tags removed to prevent Mistral from imitating XML format for tool calls
         if message_type == 'system':
             heartbeat_addon = """
 
-<autonomous_heartbeat_mode>
+AUTONOMOUS HEARTBEAT MODE:
 
 ⚠️ HEARTBEAT CHECK - FULL AUTONOMY GRANTED! 💓
 
@@ -536,17 +535,13 @@ This is a heartbeat check. You have **complete freedom** and **full tool access*
 - Decide based on: time of day, recent conversations, your goals, what you're thinking about
 
 **Response Format:**
-You MUST end your response with a decision block in this EXACT format:
+You MUST end your response with a decision in this EXACT format:
 
-<decision>
-send_message: true
-</decision>
+DECISION: send_message: true
 
 OR
 
-<decision>
-send_message: false
-</decision>
+DECISION: send_message: false
 
 **Decision Guidelines:**
 - `send_message: true` → Your message content will be sent to Discord
@@ -556,64 +551,50 @@ send_message: false
 
 Example 1: Send a message after research
 ```
-<think>
+THINKING:
 It's been 6 hours since we talked about quantum computing. I should check if there are any breakthroughs worth sharing!
-</think>
 
 *Uses web_search tool to find recent quantum computing news*
 *Uses memory_insert to save research notes*
 
 Hey Angel! Just found this fascinating development in quantum error correction that relates to our earlier conversation...
 
-<decision>
-send_message: true
-</decision>
+DECISION: send_message: true
 ```
 
 Example 2: Silent memory update
 ```
-<think>
+THINKING:
 Angel mentioned preferring technical discussions in the evening. I should update my conversation patterns memory.
-</think>
 
 *Uses core_memory_append to update conversation preferences*
 
-<decision>
-send_message: false
-</decision>
+DECISION: send_message: false
 ```
 
 Example 3: Background research
 ```
-<think>
+THINKING:
 I want to learn more about transformer architectures for my own knowledge.
-</think>
 
 *Uses web_search to research transformer architectures*
 *Uses archival_memory_insert to save key insights*
 
-<decision>
-send_message: false
-</decision>
+DECISION: send_message: false
 ```
 
 Example 4: Do nothing
 ```
-<think>
+THINKING:
 Nothing particularly interesting to do right now. Just maintaining presence.
-</think>
 
-<decision>
-send_message: false
-</decision>
+DECISION: send_message: false
 ```
 
 **Remember:** You have complete autonomy! Use tools freely, make intelligent decisions, and only send a message if you have something worthwhile to share.
-
-</autonomous_heartbeat_mode>
 """
             prompt_parts.append(heartbeat_addon)
-            print(f"💓 Autonomous heartbeat mode ADD-ON injected: {len(heartbeat_addon)} chars")
+            print(f"💓 Autonomous heartbeat mode ADD-ON injected (non-XML): {len(heartbeat_addon)} chars")
 
         # Add memory metadata (LETTA STYLE!)
         prompt_parts.append("\n\n### MEMORY METADATA\n")
@@ -648,7 +629,6 @@ send_message: false
         prompt_parts.append("**DO NOT** output function calls as XML tags like `<tool_name>{args}</tool_name>`.\n")
         prompt_parts.append("**DO NOT** output function calls as text - use the native function calling mechanism.\n")
         prompt_parts.append("The system will automatically handle function calls via the API's `tool_calls` field.\n")
-        prompt_parts.append("\n**Exception:** The `<think>` and `<decision>` tags are for your internal reasoning and decisions, NOT for function calls.\n")
 
         final_prompt = "".join(prompt_parts)
         print(f"\n✅ System prompt built: {len(final_prompt)} chars total")
@@ -663,7 +643,9 @@ send_message: false
         """
         Parse the send_message decision from Nate's response and remove decision block.
 
-        Looks for <decision>send_message: true/false</decision> block.
+        Looks for either:
+        - New format: DECISION: send_message: true/false
+        - Old format: <decision>send_message: true/false</decision> (for backward compatibility)
 
         Args:
             response_content: The full response content from Nate
@@ -673,7 +655,31 @@ send_message: false
         """
         import re
 
-        # Look for <decision> block
+        # Try new non-XML format first: DECISION: send_message: true
+        decision_match = re.search(
+            r'DECISION:\s*send_message:\s*(true|false)',
+            response_content,
+            re.IGNORECASE
+        )
+
+        if decision_match:
+            decision = decision_match.group(1).lower()
+            send_message = decision == 'true'
+
+            # Remove the decision line from the content
+            cleaned_content = re.sub(
+                r'DECISION:\s*send_message:\s*(true|false)',
+                '',
+                response_content,
+                flags=re.IGNORECASE
+            ).strip()
+
+            print(f"💓 Heartbeat decision found (new format): send_message = {decision}")
+            print(f"💓 Decision line removed from message content")
+
+            return cleaned_content, send_message
+
+        # Fall back to old XML format for backward compatibility
         decision_match = re.search(
             r'<decision>\s*send_message:\s*(true|false)\s*</decision>',
             response_content,
@@ -692,7 +698,7 @@ send_message: false
                 flags=re.IGNORECASE | re.DOTALL
             ).strip()
 
-            print(f"💓 Heartbeat decision found: send_message = {decision}")
+            print(f"💓 Heartbeat decision found (old XML format): send_message = {decision}")
             print(f"💓 Decision block removed from message content")
 
             return cleaned_content, send_message
@@ -1470,14 +1476,25 @@ send_message: false
                 import traceback
                 traceback.print_exc()
         else:
-            # Extract <think> tags from response content (Prompt-based)
+            # Extract thinking from response content (Prompt-based)
+            # Support both new "THINKING:" format and old <think> tags
             import re
-            think_match = re.search(r'<think>(.*?)</think>', final_response, re.DOTALL | re.IGNORECASE)
+
+            # Try new format first: THINKING: ...
+            think_match = re.search(r'THINKING:\s*\n(.*?)(?=\n\n|\*Uses|\Z)', final_response, re.DOTALL | re.IGNORECASE)
             if think_match:
                 thinking = think_match.group(1).strip()
-                clean_response = re.sub(r'<think>.*?</think>', '', final_response, flags=re.DOTALL | re.IGNORECASE).strip()
-                print(f"🧠 Thinking extracted (prompt-based): {len(thinking)} chars")
+                clean_response = re.sub(r'THINKING:\s*\n.*?(?=\n\n|\*Uses|\Z)', '', final_response, count=1, flags=re.DOTALL | re.IGNORECASE).strip()
+                print(f"🧠 Thinking extracted (new format): {len(thinking)} chars")
                 print(f"💬 Clean response: {len(clean_response)} chars")
+            else:
+                # Fall back to old XML format
+                think_match = re.search(r'<think>(.*?)</think>', final_response, re.DOTALL | re.IGNORECASE)
+                if think_match:
+                    thinking = think_match.group(1).strip()
+                    clean_response = re.sub(r'<think>.*?</think>', '', final_response, flags=re.DOTALL | re.IGNORECASE).strip()
+                    print(f"🧠 Thinking extracted (old XML format): {len(thinking)} chars")
+                    print(f"💬 Clean response: {len(clean_response)} chars")
         
         # THEN: Store assistant message (with thinking!)
         if clean_response:
@@ -1990,25 +2007,23 @@ send_message: false
             is_native = has_native_reasoning(model)
             
             if not is_native:
-                # Extract thinking tags from final_response (prompt-based)
-                # Support <think> AND <think> tags!
+                # Extract thinking from final_response (prompt-based)
+                # Support both new "THINKING:" format and old XML tags
                 import re
-                
-                # Try <think> first (standard format)
-                think_match = re.search(r'<think>(.*?)</think>', final_response, re.DOTALL | re.IGNORECASE)
+
+                # Try new format first: THINKING: ...
+                think_match = re.search(r'THINKING:\s*\n(.*?)(?=\n\n|\*Uses|\Z)', final_response, re.DOTALL | re.IGNORECASE)
                 if think_match:
                     thinking = think_match.group(1).strip()
-                    # Remove thinking tags from final_response
-                    final_response = re.sub(r'<think>.*?</think>', '', final_response, flags=re.DOTALL | re.IGNORECASE).strip()
-                    print(f"🧠 Thinking extracted (<think>): {len(thinking)} chars")
+                    final_response = re.sub(r'THINKING:\s*\n.*?(?=\n\n|\*Uses|\Z)', '', final_response, count=1, flags=re.DOTALL | re.IGNORECASE).strip()
+                    print(f"🧠 Thinking extracted (new format): {len(thinking)} chars")
                 else:
-                    # Try <think> tags (some models use this!)
+                    # Fall back to old XML format
                     think_match = re.search(r'<think>(.*?)</think>', final_response, re.DOTALL | re.IGNORECASE)
                     if think_match:
                         thinking = think_match.group(1).strip()
-                        # Remove thinking tags from final_response
                         final_response = re.sub(r'<think>.*?</think>', '', final_response, flags=re.DOTALL | re.IGNORECASE).strip()
-                        print(f"🧠 Thinking extracted (<think>): {len(thinking)} chars")
+                        print(f"🧠 Thinking extracted (old XML format): {len(thinking)} chars")
         
         # Store assistant message (WITH thinking!)
         # 🚨 ALWAYS save, even if empty! (User's request!)
