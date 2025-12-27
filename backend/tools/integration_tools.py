@@ -22,6 +22,8 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Import the actual tool implementations from Letta
 from tools.discord_tool import discord_tool as _discord_tool
 from tools.spotify_control import spotify_control as _spotify_control
+from tools.send_voice_message import send_voice_message as _send_voice_message
+from tools.send_text_message import send_text_message as _send_text_message
 from tools.web_search import web_search as _web_search
 from tools.fetch_webpage import fetch_webpage as _fetch_webpage
 
@@ -161,6 +163,73 @@ class IntegrationTools:
                 "message": f"Spotify control error: {str(e)}"
             }
     
+    # ============================================
+    # VOICE MESSAGE
+    # ============================================
+
+    def send_voice_message(self, **kwargs) -> Dict[str, Any]:
+        """
+        Send a voice message via Discord using Eleven Labs TTS.
+
+        Args:
+            message: Text to convert to speech and send
+            target: User ID or channel ID (optional)
+            target_type: 'user' or 'channel' (optional)
+
+        Returns:
+            Dict with status and result
+        """
+        try:
+            # Debug: Log the actual kwargs received
+            print(f"🔍 send_voice_message called with kwargs: {list(kwargs.keys())}")
+
+            # Filter to only valid parameters to prevent errors from extra keys
+            valid_params = {'message', 'target', 'target_type'}
+            filtered_kwargs = {k: v for k, v in kwargs.items() if k in valid_params}
+
+            if filtered_kwargs != kwargs:
+                extra_keys = set(kwargs.keys()) - valid_params
+                print(f"⚠️  Filtered out extra keys: {extra_keys}")
+
+            result = _send_voice_message(**filtered_kwargs)
+            return result
+        except Exception as e:
+            # Log full traceback for debugging
+            import traceback
+            print(f"❌ send_voice_message error:")
+            print(f"   kwargs keys: {list(kwargs.keys())}")
+            print(f"   kwargs: {kwargs}")
+            traceback.print_exc()
+            return {
+                "status": "error",
+                "message": f"Voice message error: {str(e)}"
+            }
+
+    # ============================================
+    # TEXT MESSAGE
+    # ============================================
+
+    def send_text_message(self, **kwargs) -> Dict[str, Any]:
+        """
+        Send a text message via Discord.
+
+        Args:
+            message: Text to send
+            target: User ID or channel ID (optional)
+            target_type: 'user' or 'channel' (optional)
+
+        Returns:
+            Dict with status and result
+        """
+        try:
+            result = _send_text_message(**kwargs)
+            return result
+        except Exception as e:
+            return {
+                "status": "error",
+                "message": f"Text message error: {str(e)}"
+            }
+
     # ============================================
     # WEB SEARCH (FREE - DuckDuckGo!)
     # ============================================
@@ -402,7 +471,9 @@ class IntegrationTools:
         
         tool_names = [
             'discord_tool',
-            'spotify_control'
+            'spotify_control',
+            'send_voice_message',
+            'send_text_message'
         ]
         
         for tool_name in tool_names:

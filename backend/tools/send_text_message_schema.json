@@ -1,0 +1,41 @@
+{
+  "name": "send_text_message",
+  "description": "Send a text message to Angela via Discord. The message will be sent as plain text (not voice). Use this for normal conversations, sharing thoughts, or when voice isn't needed. Messages over 2000 characters are automatically split into multiple chunks. Use send_voice_message when you want your voice to add intimacy and emotion.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "message": {
+        "type": "string",
+        "description": "The text message to send. Auto-chunks messages over 2000 characters into multiple Discord messages."
+      },
+      "target": {
+        "type": "string",
+        "description": "Discord user ID or channel ID to send to (optional - defaults to Angela's user ID from DEFAULT_USER_ID)"
+      },
+      "target_type": {
+        "type": "string",
+        "description": "Type of target: 'user' for DMs, 'channel' for channels, or 'auto' (default: 'auto')",
+        "enum": ["user", "channel", "auto"],
+        "default": "auto"
+      },
+      "mention_users": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "List of user IDs to mention in the message (channel only, optional)"
+      },
+      "ping_everyone": {
+        "type": "boolean",
+        "description": "Ping @everyone in channel (channel only, optional)",
+        "default": false
+      },
+      "ping_here": {
+        "type": "boolean",
+        "description": "Ping @here in channel (channel only, optional)",
+        "default": false
+      }
+    },
+    "required": ["message"]
+  }
+}
