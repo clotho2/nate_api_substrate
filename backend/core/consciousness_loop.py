@@ -1293,11 +1293,15 @@ send_message: false
             is_mistral = 'mistral' in model.lower()
             if content and not tool_calls and is_mistral and tool_schemas:
                 print(f"🔍 MISTRAL CHECK: Checking for XML-formatted tool calls in response")
+                print(f"   📄 Raw response (first 500 chars): {content[:500]}")
+                print(f"   📄 Raw response (last 200 chars): {content[-200:]}")
                 clean_content, mistral_tools = self._parse_mistral_xml_tool_calls(content)
                 if mistral_tools:
                     print(f"   ✅ Parsed {len(mistral_tools)} XML tool call(s)")
                     tool_calls = mistral_tools
                     content = clean_content
+                else:
+                    print(f"   ⚠️ No XML tool calls found in response")
 
             if content and not tool_calls:
                 # ✅ FINAL ANSWER - model responded naturally!
@@ -1930,11 +1934,15 @@ send_message: false
                 is_mistral = 'mistral' in model.lower()
                 if final_response and not tool_calls and is_mistral:
                     print(f"🔍 MISTRAL CHECK (streaming): Checking for XML-formatted tool calls")
+                    print(f"   📄 Raw response (first 500 chars): {final_response[:500]}")
+                    print(f"   📄 Raw response (last 200 chars): {final_response[-200:]}")
                     clean_content, mistral_tools = self._parse_mistral_xml_tool_calls(final_response)
                     if mistral_tools:
                         print(f"   ✅ Parsed {len(mistral_tools)} XML tool call(s) from stream")
                         tool_calls = mistral_tools
                         final_response = clean_content
+                    else:
+                        print(f"   ⚠️ No XML tool calls found in response")
 
                 # If we have content and no tools, we're done!
                 if final_response and not tool_calls:
