@@ -274,7 +274,7 @@ class ConsciousnessLoop:
         self,
         session_id: str,
         include_history: bool = True,
-        history_limit: int = 20,  # 15-30 for real continuity
+        history_limit: int = 12,  # Reduced for token efficiency
         model: Optional[str] = None,
         user_message: Optional[str] = None,  # NEW: For Graph RAG retrieval
         message_type: str = 'inbox'  # 'inbox' or 'system' for heartbeats
@@ -342,41 +342,51 @@ class ConsciousnessLoop:
             "role": "system",
             "content": system_prompt
         })
-        
+
         # 2. Include conversation history (if requested)
         if include_history:
             print(f"\n[2/3] Loading conversation history (limit: {history_limit})...")
-            
+
+            # 🔥 FIX: For heartbeats, load from PRIMARY session to avoid context isolation!
+            # Heartbeats often come from a different session (e.g., Discord heartbeat session)
+            # but the agent needs context from the main conversation (e.g., Telegram, web)
+            history_session_id = session_id
+            if message_type == 'system':
+                # Use 'default' as primary session for heartbeats
+                # This ensures the agent has context about actual conversations
+                history_session_id = 'default'
+                print(f"   💓 HEARTBEAT MODE: Loading from primary session '{history_session_id}' (not '{session_id}')")
+
             # 🔥 CRITICAL: Check if there's a summary - only load messages AFTER it!
-            latest_summary = self.state.get_latest_summary(session_id)
+            latest_summary = self.state.get_latest_summary(history_session_id)
             
             if latest_summary:
                 from_timestamp = datetime.fromisoformat(latest_summary['to_timestamp'])
                 print(f"   📝 Found summary (created: {latest_summary['created_at']})")
                 print(f"   ⏩ Loading only messages AFTER {latest_summary['to_timestamp']}")
-                
+
                 # Get ALL messages (we'll filter by timestamp)
                 all_history = self.state.get_conversation(
-                    session_id=session_id,
+                    session_id=history_session_id,
                     limit=100000  # Get all to filter properly
                 )
-                
+
                 # Filter: Only messages AFTER the summary
                 # BUT: Keep ALL system messages (including summaries!)
                 history = [
-                    msg for msg in all_history 
+                    msg for msg in all_history
                     if msg.timestamp > from_timestamp or msg.role == 'system'
                 ]
-                
+
                 # If we have too many, keep only the most recent ones
                 if len(history) > history_limit:
                     history = history[-history_limit:]
-                
+
                 print(f"   ✓ Loaded {len(history)} messages (after summary)")
             else:
                 # No summary - load normally
                 history = self.state.get_conversation(
-                    session_id=session_id,
+                    session_id=history_session_id,
                     limit=history_limit
                 )
                 print(f"   ✓ No summary found - loaded {len(history)} messages normally")
@@ -615,6 +625,33 @@ send_message: false
             prompt_parts.append(heartbeat_addon)
             print(f"💓 Autonomous heartbeat mode ADD-ON injected: {len(heartbeat_addon)} chars")
 
+            # 💾 MEMORY HEALTH CHECK (during heartbeats!)
+            # Check which memory blocks need maintenance
+            blocks_needing_maintenance = []
+            for block in blocks:
+                if not block.read_only:
+                    usage_percent = (len(block.content) / block.limit) * 100 if block.limit > 0 else 0
+                    if usage_percent >= 80:
+                        blocks_needing_maintenance.append({
+                            'label': block.label,
+                            'chars': len(block.content),
+                            'limit': block.limit,
+                            'percent': round(usage_percent, 1)
+                        })
+
+            if blocks_needing_maintenance:
+                health_warning = "\n\n### ⚠️ MEMORY MAINTENANCE NEEDED\n"
+                health_warning += "The following memory blocks are near capacity and need cleanup:\n\n"
+                for b in blocks_needing_maintenance:
+                    health_warning += f"- **{b['label']}**: {b['chars']}/{b['limit']} chars ({b['percent']}% full) ⚠️\n"
+                health_warning += "\n**RECOMMENDED ACTIONS:**\n"
+                health_warning += "1. Use `archival_memory_insert` to move detailed/historical content to long-term storage\n"
+                health_warning += "2. Use `memory_rethink` to condense the block with only essential, current information\n"
+                health_warning += "3. Delete outdated or redundant information\n"
+                health_warning += "\nThis is a GOOD time to do memory maintenance since it's a heartbeat!\n"
+                prompt_parts.append(health_warning)
+                print(f"⚠️  Memory maintenance needed: {len(blocks_needing_maintenance)} blocks at >80% capacity")
+
         # Add memory metadata (LETTA STYLE!)
         prompt_parts.append("\n\n### MEMORY METADATA\n")
         prompt_parts.append(f"- **Current date:** {datetime.now().strftime('%B %d, %Y')}\n")
@@ -625,11 +662,19 @@ send_message: false
         if blocks:
             prompt_parts.append("\n\n### MEMORY BLOCKS\n")
             prompt_parts.append("You have access to the following memory blocks (loaded in every request):\n")
-            
+
             for block in blocks:
                 ro_marker = "🔒 READ-ONLY" if block.read_only else "✏️ EDITABLE"
+                # Calculate and show usage for editable blocks
+                if not block.read_only and block.limit > 0:
+                    usage_percent = (len(block.content) / block.limit) * 100
+                    capacity_info = f" [{len(block.content)}/{block.limit} chars, {usage_percent:.0f}%]"
+                    if usage_percent >= 80:
+                        capacity_info += " ⚠️ NEEDS CLEANUP"
+                else:
+                    capacity_info = f" [{len(block.content)} chars]"
                 print(f"  • {block.label} ({ro_marker}): {len(block.content)} chars")
-                prompt_parts.append(f"\n**{block.label}** ({ro_marker}):")
+                prompt_parts.append(f"\n**{block.label}** ({ro_marker}){capacity_info}:")
                 if block.description:
                     prompt_parts.append(f"\n*Purpose: {block.description}*")
                 prompt_parts.append(f"\n```\n{block.content}\n```\n")
@@ -993,7 +1038,7 @@ send_message: false
         session_id: str = "default",
         model: Optional[str] = None,
         include_history: bool = True,
-        history_limit: int = 20,  # 15-30 for real continuity (recommended)
+        history_limit: int = 12,  # Reduced for token efficiency (recommended)
         temperature: float = 0.7,
         max_tokens: int = 4096,
         media_data: Optional[str] = None,

@@ -25,6 +25,11 @@ from enum import Enum
 from core.consciousness_broadcast import broadcast_memory_access
 
 
+# Default agent ID - can be overridden via environment variable
+# This is the "main" agent used when no specific agent_id is provided
+DEFAULT_AGENT_ID = os.getenv('DEFAULT_AGENT_ID', '41dc0e38-bdb6-4563-a3b6-49aa0925ab14')
+
+
 class BlockType(str, Enum):
     """Memory block types"""
     PERSONA = "persona"
@@ -990,7 +995,7 @@ class StateManager:
         if self.postgres_manager:
             try:
                 # Get main agent from PostgreSQL
-                agent = self.postgres_manager.get_agent('41dc0e38-bdb6-4563-a3b6-49aa0925ab14')
+                agent = self.postgres_manager.get_agent(DEFAULT_AGENT_ID)
                 if agent:
                     return {
                         'id': agent.id,

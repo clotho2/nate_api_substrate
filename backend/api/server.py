@@ -527,7 +527,7 @@ def ollama_compat_chat():
                             session_id=session_id,
                             model=model,
                             include_history=True,
-                            history_limit=20,
+                            history_limit=12,
                             message_type=message_type
                         )
                         
@@ -557,7 +557,7 @@ def ollama_compat_chat():
                         session_id=session_id,
                         model=model,
                         include_history=True,
-                        history_limit=20,  # 15-30 for continuity (recommended)
+                        history_limit=12,  # Reduced for token efficiency
                         media_data=media_data,  # Multi-modal support!
                         media_type=media_type,
                         message_type=message_type  # inbox or system
@@ -674,7 +674,7 @@ def ollama_compat_chat_stream():
                     session_id=session_id,
                     model=model,
                     include_history=True,
-                    history_limit=20,
+                    history_limit=12,
                     message_type=message_type
                 )
                 

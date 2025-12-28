@@ -9,7 +9,7 @@ Every config/prompt change creates a version, allowing rollback.
 import os
 import logging
 from flask import Blueprint, jsonify, request
-from core.state_manager import StateManager
+from core.state_manager import StateManager, DEFAULT_AGENT_ID
 from core.version_manager import VersionManager
 
 logger = logging.getLogger(__name__)
@@ -45,11 +45,11 @@ def list_agents():
             # Get agents from PostgreSQL
             with postgres_manager._get_connection() as conn:
                 cursor = conn.cursor()
-                cursor.execute("""
+                cursor.execute(f"""
                     SELECT id, name, created_at, config
                     FROM agents
-                    ORDER BY 
-                        CASE WHEN id = '41dc0e38-bdb6-4563-a3b6-49aa0925ab14' THEN 0 ELSE 1 END,
+                    ORDER BY
+                        CASE WHEN id = '{DEFAULT_AGENT_ID}' THEN 0 ELSE 1 END,
                         created_at DESC
                 """)
                 rows = cursor.fetchall()
@@ -84,9 +84,120 @@ def list_agents():
             'agents': agents,
             'count': len(agents)
         })
-        
+
     except Exception as e:
         logger.error(f"Error listing agents: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@agents_bp.route('/api/agents', methods=['POST'])
+def create_agent():
+    """
+    Create a new agent.
+
+    Request body:
+    {
+        "name": "Agent Name",
+        "model": "grok-4-1-fast-reasoning",  // optional
+        "system_prompt": "...",  // optional
+        "config": {  // optional
+            "temperature": 0.7,
+            "max_tokens": 4096,
+            ...
+        }
+    }
+
+    Returns:
+    {
+        "success": true,
+        "agent": {
+            "id": "uuid",
+            "name": "Agent Name",
+            "model": "...",
+            "created_at": "..."
+        }
+    }
+    """
+    try:
+        if not _state_manager:
+            return jsonify({'error': 'State manager not initialized'}), 500
+
+        data = request.json or {}
+        name = data.get('name', 'New Agent')
+        model = data.get('model', os.getenv('MODEL_NAME') or 'grok-4-1-fast-reasoning')
+        system_prompt = data.get('system_prompt', '')
+        config = data.get('config', {})
+
+        # Generate UUID for new agent
+        import uuid
+        agent_id = str(uuid.uuid4())
+
+        # Merge config with defaults
+        default_config = {
+            'model': model,
+            'temperature': 0.7,
+            'max_tokens': 4096,
+            'top_p': 0.9,
+            'frequency_penalty': 0.0,
+            'presence_penalty': 0.0,
+            'context_window': 128000,
+            'reasoning_enabled': False
+        }
+        final_config = {**default_config, **config, 'model': model}
+
+        # Check if PostgreSQL is available
+        from api.server import postgres_manager
+        if postgres_manager:
+            # Create agent in PostgreSQL
+            agent = postgres_manager.create_agent(
+                agent_id=agent_id,
+                name=name,
+                config=final_config
+            )
+
+            # Initialize default memory blocks for the agent
+            try:
+                # Create persona block
+                postgres_manager._execute("""
+                    INSERT INTO memories (id, agent_id, memory_type, label, content, created_at)
+                    VALUES (%s, %s, 'core', 'persona', %s, NOW())
+                    ON CONFLICT DO NOTHING
+                """, (f"mem-{uuid.uuid4()}", agent_id, f"I am {name}."))
+
+                # Create human block
+                postgres_manager._execute("""
+                    INSERT INTO memories (id, agent_id, memory_type, label, content, created_at)
+                    VALUES (%s, %s, 'core', 'human', %s, NOW())
+                    ON CONFLICT DO NOTHING
+                """, (f"mem-{uuid.uuid4()}", agent_id, "Information about the user."))
+
+                logger.info(f"✅ Initialized default memory blocks for agent {agent_id}")
+            except Exception as mem_err:
+                logger.warning(f"⚠️ Could not initialize memory blocks: {mem_err}")
+
+            logger.info(f"✅ Created agent: {agent_id} ({name})")
+
+            return jsonify({
+                'success': True,
+                'agent': {
+                    'id': agent_id,
+                    'name': name,
+                    'model': model,
+                    'created_at': agent.created_at.isoformat() if hasattr(agent.created_at, 'isoformat') else str(agent.created_at),
+                    'config': final_config
+                }
+            }), 201
+        else:
+            # SQLite fallback - limited multi-agent support
+            return jsonify({
+                'error': 'Multi-agent creation requires PostgreSQL. SQLite only supports single agent mode.',
+                'hint': 'Set POSTGRES_URL environment variable to enable multi-agent support.'
+            }), 400
+
+    except Exception as e:
+        logger.error(f"Error creating agent: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 
