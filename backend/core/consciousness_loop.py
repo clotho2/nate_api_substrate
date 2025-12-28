@@ -158,7 +158,9 @@ class ConsciousnessLoop:
             'anthropic/claude-3.5-sonnet',  # Supports tools, large context
             'openai/gpt-4o',  # Supports tools, large context
             'openai/gpt-4o-mini',  # Supports tools, cheap, large context (128k tokens)
+            'openai/chatgpt-4o-latest',  # ChatGPT 4o latest - Supports tools
             'mistralai/mistral-small-2501',  # Supports tools, cheap, large context
+            'mistralai/mistral-large-2512',  # Mistral Large 3 (December 2024) - Supports tools, large context (256k tokens)
         }
         
         # Check if model is in known good list (prioritize this!)
@@ -690,6 +692,69 @@ send_message: false
         print(f"⚠️  No heartbeat decision block found - defaulting to send_message = true")
         return response_content, True
 
+    def _parse_mistral_xml_tool_calls(self, content: str) -> tuple:
+        """
+        Parse Mistral's XML-formatted tool calls from content.
+        Mistral Large 3 outputs tool calls as XML tags when it sees XML in the system prompt:
+        <tool_name>{"arg": "value"}</tool_name>
+
+        Returns: (cleaned_content, tool_calls_list)
+        """
+        import re
+        import json
+
+        tool_calls = []
+        clean_content = content
+
+        # Get all available tool names to validate against
+        tool_names = set()
+        if hasattr(self, 'tools'):
+            tool_schemas = self.tools.get_tool_schemas()
+            for schema in tool_schemas:
+                tool_names.add(schema.get('function', {}).get('name', ''))
+
+        # Find all XML tag pairs and extract content
+        # This approach handles nested JSON properly by extracting everything between tags first
+        found_calls = []
+        for tool_name in tool_names:
+            # Find all occurrences of this tool
+            pattern = f'<{tool_name}>(.*?)</{tool_name}>'
+            for match in re.finditer(pattern, content, re.DOTALL):
+                found_calls.append((tool_name, match.group(1).strip(), match.group(0)))
+
+        if found_calls:
+            print(f"🔍 MISTRAL XML FORMAT: Found {len(found_calls)} potential tool call(s)")
+
+            for i, (tool_name, arguments_str, full_match) in enumerate(found_calls):
+                try:
+                    # Parse JSON arguments
+                    arguments = json.loads(arguments_str)
+
+                    # Create ToolCall object
+                    from core.openrouter_client import ToolCall
+                    tool_call = ToolCall(
+                        id=f"mistral_xml_{i}",
+                        name=tool_name,
+                        arguments=arguments
+                    )
+                    tool_calls.append(tool_call)
+                    print(f"   ✅ Parsed: {tool_name}({json.dumps(arguments)[:100]}...)")
+
+                    # Remove this tool call from content (remove the full XML tag)
+                    clean_content = clean_content.replace(full_match, '', 1)
+                except json.JSONDecodeError as e:
+                    print(f"   ⚠️  Failed to parse JSON arguments for {tool_name}: {e}")
+                    print(f"       Arguments string: {arguments_str[:200]}")
+
+        # Clean up extra whitespace
+        clean_content = re.sub(r'\n{3,}', '\n\n', clean_content)
+        clean_content = clean_content.strip()
+
+        if tool_calls:
+            print(f"   📝 Clean content remaining: {len(clean_content)} chars")
+
+        return clean_content, tool_calls
+
     def _execute_tool_call(
         self,
         tool_call: ToolCall,
@@ -746,7 +811,10 @@ send_message: false
             
             elif tool_name == "spotify_control":
                 result = self.tools.spotify_control(**arguments)
-            
+
+            elif tool_name == "send_voice_message":
+                result = self.tools.send_voice_message(**arguments)
+
             elif tool_name == "web_search":
                 result = self.tools.web_search(**arguments)
             
@@ -1220,7 +1288,21 @@ send_message: false
             # 3. No content + No tools = ERROR ❌
             
             print(f"\n🤔 DECISION:")
-            
+
+            # MISTRAL XML PARSER: Check if Mistral output tool calls as XML tags
+            is_mistral = 'mistral' in model.lower()
+            if content and not tool_calls and is_mistral and tool_schemas:
+                print(f"🔍 MISTRAL CHECK: Checking for XML-formatted tool calls in response")
+                print(f"   📄 Raw response (first 500 chars): {content[:500]}")
+                print(f"   📄 Raw response (last 200 chars): {content[-200:]}")
+                clean_content, mistral_tools = self._parse_mistral_xml_tool_calls(content)
+                if mistral_tools:
+                    print(f"   ✅ Parsed {len(mistral_tools)} XML tool call(s)")
+                    tool_calls = mistral_tools
+                    content = clean_content
+                else:
+                    print(f"   ⚠️ No XML tool calls found in response")
+
             if content and not tool_calls:
                 # ✅ FINAL ANSWER - model responded naturally!
                 print(f"✅ FINAL ANSWER - Model responded with content, no tools needed!")
@@ -1583,10 +1665,11 @@ send_message: false
         
         # Get tool schemas (only if model supports tools!)
         model_supports_tools = self._model_supports_tools(model)
-        
+
         if model_supports_tools:
             tool_schemas = self.tools.get_tool_schemas()
             print(f"✅ Model {model} supports tool calling (streaming mode)")
+            print(f"  • Tools enabled: {len(tool_schemas)}")
         else:
             tool_schemas = None
             print(f"⚠️  Model {model} does NOT support tool calling (streaming mode - chat-only)")
@@ -1790,17 +1873,77 @@ send_message: false
                 
                 # Parse final tool calls
                 if tool_calls_in_response:
-                    # Reconstruct tool calls from chunks
+                    # Reconstruct tool calls from streaming chunks
+                    # GPT-4o and other models send tool calls in fragments across multiple chunks
+                    # We need to merge chunks with the same index to get complete tool calls
+                    reconstructed_calls = {}
+
+                    for chunk_array in tool_calls_in_response:
+                        # Each chunk_array is a list of tool call deltas
+                        if isinstance(chunk_array, list):
+                            for tool_delta in chunk_array:
+                                idx = tool_delta.get('index', 0)
+
+                                if idx not in reconstructed_calls:
+                                    # Initialize new tool call
+                                    reconstructed_calls[idx] = {
+                                        'id': tool_delta.get('id', ''),
+                                        'type': tool_delta.get('type', 'function'),
+                                        'function': {
+                                            'name': tool_delta.get('function', {}).get('name', ''),
+                                            'arguments': ''
+                                        }
+                                    }
+
+                                # Merge the delta into reconstructed call
+                                if 'id' in tool_delta and tool_delta['id']:
+                                    reconstructed_calls[idx]['id'] = tool_delta['id']
+
+                                if 'type' in tool_delta:
+                                    reconstructed_calls[idx]['type'] = tool_delta['type']
+
+                                if 'function' in tool_delta:
+                                    func_delta = tool_delta['function']
+
+                                    if 'name' in func_delta and func_delta['name']:
+                                        reconstructed_calls[idx]['function']['name'] = func_delta['name']
+
+                                    # Accumulate arguments (streaming sends them in pieces!)
+                                    if 'arguments' in func_delta:
+                                        reconstructed_calls[idx]['function']['arguments'] += func_delta['arguments']
+
+                    # Convert to list and parse
+                    final_tool_calls = list(reconstructed_calls.values())
+
+                    if final_tool_calls:
+                        print(f"🔧 Reconstructed {len(final_tool_calls)} tool call(s) from {len(tool_calls_in_response)} streaming chunks")
+                        for tc in final_tool_calls:
+                            print(f"   • {tc['function']['name']}: {len(tc['function']['arguments'])} chars")
+
                     tool_calls = self.openrouter.parse_tool_calls({
                         'choices': [{
                             'message': {
-                                'tool_calls': tool_calls_in_response
+                                'tool_calls': final_tool_calls
                             }
                         }]
                     })
                 else:
                     tool_calls = []
-                
+
+                # MISTRAL XML PARSER: Check if Mistral output tool calls as XML tags (streaming)
+                is_mistral = 'mistral' in model.lower()
+                if final_response and not tool_calls and is_mistral:
+                    print(f"🔍 MISTRAL CHECK (streaming): Checking for XML-formatted tool calls")
+                    print(f"   📄 Raw response (first 500 chars): {final_response[:500]}")
+                    print(f"   📄 Raw response (last 200 chars): {final_response[-200:]}")
+                    clean_content, mistral_tools = self._parse_mistral_xml_tool_calls(final_response)
+                    if mistral_tools:
+                        print(f"   ✅ Parsed {len(mistral_tools)} XML tool call(s) from stream")
+                        tool_calls = mistral_tools
+                        final_response = clean_content
+                    else:
+                        print(f"   ⚠️ No XML tool calls found in response")
+
                 # If we have content and no tools, we're done!
                 if final_response and not tool_calls:
                     print(f"✅ Response complete: {final_response[:100]}...")

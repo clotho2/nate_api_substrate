@@ -155,18 +155,18 @@ class OpenRouterClient:
         default_model: str = "openrouter/polaris-alpha",
         app_name: str = "SubstrateAI",
         app_url: Optional[str] = None,
-        timeout: int = 60,
+        timeout: int = 120,
         cost_tracker = None
     ):
         """
         Initialize OpenRouter client.
-        
+
         Args:
             api_key: OpenRouter API key
             default_model: Default model to use
             app_name: App name for OpenRouter tracking
             app_url: App URL for OpenRouter tracking
-            timeout: Request timeout in seconds
+            timeout: Request timeout in seconds (default: 120s for large context windows)
             cost_tracker: Optional CostTracker instance for persistent cost logging
         """
         if not api_key or not api_key.startswith("sk-or-v1-"):
