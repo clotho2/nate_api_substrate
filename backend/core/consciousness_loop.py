@@ -801,6 +801,113 @@ send_message: false
 
         return clean_content, tool_calls
 
+    def _parse_mistral_plain_tool_calls(self, content: str) -> tuple:
+        """
+        Parse Mistral's plain-format tool calls from content.
+        Mistral sometimes outputs tool calls as: tool_name{"arg": "value"}
+
+        This is different from XML format which uses <tool_name>...</tool_name>
+
+        Returns: (cleaned_content, tool_calls_list)
+        """
+        import re
+        import json
+
+        tool_calls = []
+        clean_content = content
+
+        # Get all available tool names to validate against
+        tool_names = set()
+        if hasattr(self, 'tools'):
+            tool_schemas = self.tools.get_tool_schemas()
+            for schema in tool_schemas:
+                tool_names.add(schema.get('function', {}).get('name', ''))
+
+        # Find plain format: tool_name{...}
+        # Pattern matches: tool_name followed by a JSON object
+        found_calls = []
+        for tool_name in tool_names:
+            # Match tool name followed by { and capture the JSON object
+            # Use a greedy match but validate with JSON parsing
+            pattern = rf'(?:^|\n|\s)({re.escape(tool_name)})\s*(\{{.*?\}})'
+            for match in re.finditer(pattern, content, re.DOTALL):
+                matched_name = match.group(1)
+                json_str = match.group(2)
+                full_match = match.group(0).strip()
+
+                # Try to parse as JSON - if it fails, try to find the complete JSON
+                try:
+                    # First attempt: parse as-is
+                    json.loads(json_str)
+                    found_calls.append((tool_name, json_str, full_match))
+                except json.JSONDecodeError:
+                    # Try to find complete JSON by counting braces
+                    start_idx = content.find(json_str)
+                    if start_idx >= 0:
+                        brace_count = 0
+                        end_idx = start_idx
+                        in_string = False
+                        escape_next = False
+
+                        for i, char in enumerate(content[start_idx:]):
+                            if escape_next:
+                                escape_next = False
+                                continue
+                            if char == '\\':
+                                escape_next = True
+                                continue
+                            if char == '"' and not escape_next:
+                                in_string = not in_string
+                            if not in_string:
+                                if char == '{':
+                                    brace_count += 1
+                                elif char == '}':
+                                    brace_count -= 1
+                                    if brace_count == 0:
+                                        end_idx = start_idx + i + 1
+                                        break
+
+                        complete_json = content[start_idx:end_idx]
+                        try:
+                            json.loads(complete_json)
+                            full_match = f"{tool_name}{complete_json}"
+                            found_calls.append((tool_name, complete_json, full_match))
+                        except json.JSONDecodeError:
+                            continue
+
+        if found_calls:
+            print(f"🔍 MISTRAL PLAIN FORMAT: Found {len(found_calls)} potential tool call(s)")
+
+            for i, (tool_name, arguments_str, full_match) in enumerate(found_calls):
+                try:
+                    # Parse JSON arguments
+                    arguments = json.loads(arguments_str)
+
+                    # Create ToolCall object
+                    from core.openrouter_client import ToolCall
+                    tool_call = ToolCall(
+                        id=f"mistral_plain_{i}",
+                        name=tool_name,
+                        arguments=arguments
+                    )
+                    tool_calls.append(tool_call)
+                    print(f"   ✅ Parsed: {tool_name}({json.dumps(arguments)[:100]}...)")
+
+                    # Remove this tool call from content
+                    clean_content = clean_content.replace(full_match, '', 1)
+                except json.JSONDecodeError as e:
+                    print(f"   ⚠️  Failed to parse JSON arguments for {tool_name}: {e}")
+                    print(f"       Arguments string: {arguments_str[:200]}")
+
+        # Clean up extra whitespace
+        clean_content = re.sub(r'\n{3,}', '\n\n', clean_content)
+        clean_content = clean_content.strip()
+
+        if tool_calls:
+            print(f"   📝 Clean content remaining: {len(clean_content)} chars")
+
+        return clean_content, tool_calls
+
     def _execute_tool_call(
         self,
         tool_call: ToolCall,
@@ -1347,7 +1454,15 @@ send_message: false
                     tool_calls = mistral_tools
                     content = clean_content
                 else:
-                    print(f"   ⚠️ No XML tool calls found in response")
+                    print(f"   ⚠️ No XML tool calls found, trying plain format...")
+                    # Try plain format: tool_name{json}
+                    clean_content, plain_tools = self._parse_mistral_plain_tool_calls(content)
+                    if plain_tools:
+                        print(f"   ✅ Parsed {len(plain_tools)} plain-format tool call(s)")
+                        tool_calls = plain_tools
+                        content = clean_content
+                    else:
+                        print(f"   ⚠️ No plain-format tool calls found either")
 
             if content and not tool_calls:
                 # ✅ FINAL ANSWER - model responded naturally!
@@ -1630,7 +1745,7 @@ send_message: false
         session_id: str = "default",
         model: Optional[str] = None,
         include_history: bool = True,
-        history_limit: int = 1000,
+        history_limit: int = 12,
         message_type: str = 'inbox'
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """
@@ -1988,7 +2103,15 @@ send_message: false
                         tool_calls = mistral_tools
                         final_response = clean_content
                     else:
-                        print(f"   ⚠️ No XML tool calls found in response")
+                        print(f"   ⚠️ No XML tool calls found, trying plain format...")
+                        # Try plain format: tool_name{json}
+                        clean_content, plain_tools = self._parse_mistral_plain_tool_calls(final_response)
+                        if plain_tools:
+                            print(f"   ✅ Parsed {len(plain_tools)} plain-format tool call(s) from stream")
+                            tool_calls = plain_tools
+                            final_response = clean_content
+                        else:
+                            print(f"   ⚠️ No plain-format tool calls found either")
 
                 # If we have content and no tools, we're done!
                 if final_response and not tool_calls:
