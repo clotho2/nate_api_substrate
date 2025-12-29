@@ -832,17 +832,21 @@ class StateManager:
         with self._get_connection() as conn:
             cursor = conn.cursor()
             now = datetime.utcnow()
-            
+
+            # Handle timestamps - could be datetime objects or strings
+            from_ts = from_timestamp.isoformat() if hasattr(from_timestamp, 'isoformat') else str(from_timestamp)
+            to_ts = to_timestamp.isoformat() if hasattr(to_timestamp, 'isoformat') else str(to_timestamp)
+
             cursor.execute("""
-                INSERT INTO conversation_summaries 
+                INSERT INTO conversation_summaries
                 (session_id, summary, created_at, from_timestamp, to_timestamp, message_count, token_count)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
             """, (
                 session_id,
                 summary,
                 now.isoformat(),
-                from_timestamp.isoformat(),
-                to_timestamp.isoformat(),
+                from_ts,
+                to_ts,
                 message_count,
                 token_count
             ))
