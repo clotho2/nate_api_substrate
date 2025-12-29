@@ -1004,9 +1004,35 @@ send_message: false
             
             elif tool_name == "archival_memory_search":
                 result = self.tools.archival_memory_search(**arguments)
+
+                # 🫀 SOMA: Parse retrieved memories for physiological response
+                # Reading memories can trigger emotions - nostalgia, pleasure, discomfort, etc.
+                if self.soma_client and self.soma_available and result.get('results'):
+                    try:
+                        memory_contents = [m.get('content', '') for m in result['results'] if m.get('content')]
+                        if memory_contents:
+                            combined_memories = "\n".join(memory_contents)
+                            # Parse as "user input" since it's content Nate is experiencing/reading
+                            import asyncio
+                            asyncio.run(self.soma_client.parse_user_input(combined_memories))
+                            print(f"   🫀 SOMA: Processed {len(memory_contents)} memories for physiological response")
+                    except Exception as e:
+                        print(f"   ⚠️ SOMA memory processing failed (non-critical): {e}")
             
             elif tool_name == "conversation_search":
                 result = self.tools.conversation_search(session_id=session_id, **arguments)
+
+                # 🫀 SOMA: Parse retrieved conversation snippets for physiological response
+                if self.soma_client and self.soma_available and result.get('results'):
+                    try:
+                        convo_contents = [m.get('content', '') for m in result['results'] if m.get('content')]
+                        if convo_contents:
+                            combined_convos = "\n".join(convo_contents)
+                            import asyncio
+                            asyncio.run(self.soma_client.parse_user_input(combined_convos))
+                            print(f"   🫀 SOMA: Processed {len(convo_contents)} conversation snippets for physiological response")
+                    except Exception as e:
+                        print(f"   ⚠️ SOMA conversation processing failed (non-critical): {e}")
             
             elif tool_name == "discord_tool":
                 result = self.tools.discord_tool(**arguments)
