@@ -997,10 +997,20 @@ class StateManager:
                 # Get main agent from PostgreSQL
                 agent = self.postgres_manager.get_agent(DEFAULT_AGENT_ID)
                 if agent:
+                    # IMPORTANT: Environment variables ALWAYS take priority over stored config
+                    from core.config import get_default_model
+                    try:
+                        env_model = get_default_model()
+                    except ValueError:
+                        env_model = None
+
+                    stored_model = agent.config.get('model') if agent.config else None
+                    model = env_model or stored_model or get_model_or_default()
+
                     return {
                         'id': agent.id,
                         'name': agent.name,
-                        'model': agent.config.get('model', get_model_or_default()) if agent.config else get_model_or_default(),
+                        'model': model,
                         'created_at': agent.created_at.isoformat() if agent.created_at else '',
                         'config': agent.config or {}
                     }
@@ -1008,8 +1018,26 @@ class StateManager:
                 print(f"⚠️  PostgreSQL read failed, falling back to SQLite: {e}")
 
         # 🗄️ PHASE 2: Fallback to SQLite
+        # IMPORTANT: Environment variables ALWAYS take priority over stored state
+        # This allows users to change models without editing the database
+        from core.config import get_default_model
+        try:
+            env_model = get_default_model()  # Raises if not configured
+        except ValueError:
+            env_model = None
+
+        stored_model = self.get_state('agent.model', None)
+
+        # Priority: env var > stored state > fallback
+        if env_model:
+            model = env_model
+        elif stored_model:
+            model = stored_model
+        else:
+            model = get_model_or_default()
+
         config = {
-            'model': self.get_state('agent.model', get_model_or_default()),
+            'model': model,
             'temperature': self.get_state('agent.temperature', 0.7),
             'max_tokens': self.get_state('agent.max_tokens', None),
             'top_p': self.get_state('agent.top_p', 1.0),
