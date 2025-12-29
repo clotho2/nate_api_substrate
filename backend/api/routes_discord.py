@@ -9,6 +9,7 @@ Provides:
 - Discord-optimized response format
 - Rate limiting
 - API key authentication
+- Image/multimodal support
 
 Security Features:
 - API key validation (DISCORD_API_KEY env var)
@@ -26,6 +27,7 @@ from functools import wraps
 from datetime import datetime, timedelta
 import re
 import uuid
+from typing import Optional, Tuple, List, Dict, Any
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +46,11 @@ DISCORD_API_KEY = os.getenv('DISCORD_API_KEY', '')
 # Security Constants
 MAX_MESSAGE_LENGTH = 15000  # Discord max is ~2000, but we allow more for rich content
 MAX_MESSAGES_PER_HISTORY = 100  # Limit history size
+MAX_IMAGE_SIZE = 20 * 1024 * 1024  # 20 MB max image size
 ALLOWED_AGENT_ID_PATTERN = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', re.IGNORECASE)
+
+# Supported image formats
+SUPPORTED_IMAGE_FORMATS = {'image/jpeg', 'image/png', 'image/gif', 'image/webp'}
 
 
 def init_discord_routes(consciousness_loop, state_manager, rate_limiter=None, postgres_manager=None):
@@ -129,6 +135,72 @@ def sanitize_message_content(content: str) -> str:
     return content
 
 
+def extract_image_from_attachments(attachments: List[Dict[str, Any]]) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Extract image data from Discord attachments.
+    
+    Args:
+        attachments: List of attachment dicts with keys:
+            - url: URL to the image (Discord CDN)
+            - content_type: MIME type
+            - data: base64 encoded data (optional, if pre-downloaded)
+            - size: file size in bytes
+            
+    Returns:
+        Tuple of (image_data, mime_type) or (None, None) if no valid image found
+        image_data can be a URL or base64 string
+    """
+    for attachment in attachments:
+        content_type = attachment.get('content_type', '')
+        
+        # Check if it's a supported image format
+        if content_type in SUPPORTED_IMAGE_FORMATS:
+            # Check size limit
+            size = attachment.get('size', 0)
+            if size > MAX_IMAGE_SIZE:
+                logger.warning(f"⚠️  Image too large: {size} bytes (max: {MAX_IMAGE_SIZE})")
+                continue
+            
+            # Prefer base64 data if provided (pre-downloaded by Discord bot)
+            if 'data' in attachment and attachment['data']:
+                return attachment['data'], content_type
+            
+            # Fall back to URL (consciousness loop can handle URLs)
+            if 'url' in attachment and attachment['url']:
+                return attachment['url'], content_type
+    
+    return None, None
+
+
+def extract_image_from_content(content: List[Dict[str, Any]]) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Extract image data from multimodal content array (OpenAI/Grok format).
+    
+    Args:
+        content: List of content items with type: "text" or "image_url"
+        
+    Returns:
+        Tuple of (image_data, mime_type) or (None, None) if no image found
+    """
+    for item in content:
+        if item.get('type') == 'image_url':
+            image_url_data = item.get('image_url', {})
+            url = image_url_data.get('url', '')
+            
+            # Handle data URI format: data:image/jpeg;base64,<base64_data>
+            if url.startswith('data:'):
+                match = re.match(r'data:([^;]+);base64,(.+)', url)
+                if match:
+                    mime_type = match.group(1)
+                    base64_data = match.group(2)
+                    return base64_data, mime_type
+            elif url.startswith('http'):
+                # Web URL - return as-is
+                return url, 'image/jpeg'  # Assume JPEG for web URLs
+    
+    return None, None
+
+
 # ============================================
 # DISCORD API ENDPOINTS
 # ============================================
@@ -139,21 +211,53 @@ def send_message_to_agent(agent_id):
     """
     Send a message to a specific agent and get response.
     
-    Optimized for Discord bots:
+    Optimized for Discord bots with MULTIMODAL SUPPORT:
     - Fast response time
     - Discord-friendly format
     - Session management
     - Tool call handling
+    - Image/attachment processing
     
-    **Request:**
+    **Request (Text only):**
     ```json
     {
         "content": "Hello!",
-        "session_id": "discord-user-123456",  // Optional, defaults to "discord-{agent_id}"
-        "user_id": "123456789012345678",      // Discord user ID
-        "username": "Assistant",               // Discord username
-        "channel_id": "987654321098765432",   // Discord channel ID
-        "guild_id": "111222333444555666"      // Discord server ID (optional)
+        "session_id": "discord-user-123456",
+        "user_id": "123456789012345678",
+        "username": "Assistant",
+        "channel_id": "987654321098765432",
+        "guild_id": "111222333444555666"
+    }
+    ```
+    
+    **Request (With Image - Discord attachment format):**
+    ```json
+    {
+        "content": "What's in this image?",
+        "session_id": "discord-user-123456",
+        "user_id": "123456789012345678",
+        "username": "Assistant",
+        "attachments": [
+            {
+                "url": "https://cdn.discordapp.com/attachments/.../image.png",
+                "content_type": "image/png",
+                "size": 123456,
+                "data": "<base64_encoded_image>"  // Optional: pre-downloaded by bot
+            }
+        ]
+    }
+    ```
+    
+    **Request (With Image - OpenAI/Grok multimodal format):**
+    ```json
+    {
+        "multimodal": true,
+        "content": [
+            {"type": "text", "text": "What's in this image?"},
+            {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,..."}}
+        ],
+        "session_id": "discord-user-123456",
+        "user_id": "123456789012345678"
     }
     ```
     
@@ -162,12 +266,13 @@ def send_message_to_agent(agent_id):
     {
         "success": true,
         "response": "Hey! How's it going?",
-        "thinking": "...",  // If extended thinking model
-        "tool_calls": [...],  // If tools were used
+        "thinking": "...",
+        "tool_calls": [...],
         "metadata": {
-            "model": "openrouter/polaris-alpha",
+            "model": "mistralai/mistral-large-2512",
             "tokens": 150,
-            "cost": 0.00042
+            "cost": 0.00042,
+            "has_image": true
         }
     }
     ```
@@ -177,6 +282,7 @@ def send_message_to_agent(agent_id):
     - Message sanitization (length limit, null bytes)
     - Rate limiting (per user_id)
     - SQL injection prevention
+    - Image size validation (max 20MB)
     
     **Error Codes:**
     - 400: Invalid input (missing content, bad agent_id)
@@ -200,9 +306,39 @@ def send_message_to_agent(agent_id):
         if not data:
             return jsonify({'error': 'No JSON data provided'}), 400
         
-        content = data.get('content', '').strip()
-        if not content:
-            return jsonify({'error': 'Message content is required'}), 400
+        # Initialize variables
+        media_data = None
+        media_type = None
+        has_image = False
+        
+        # Check for multimodal content (OpenAI/Grok format)
+        is_multimodal = data.get('multimodal', False)
+        
+        if is_multimodal and isinstance(data.get('content'), list):
+            # Extract text and image from multimodal content array
+            content_list = data.get('content', [])
+            text_parts = [item['text'] for item in content_list if item.get('type') == 'text']
+            content = ' '.join(text_parts) if text_parts else "What's in this image?"
+            
+            # Extract image data
+            media_data, media_type = extract_image_from_content(content_list)
+            has_image = media_data is not None
+        else:
+            # Standard text content
+            content = data.get('content', '').strip()
+            
+            # Check for Discord attachments (images)
+            attachments = data.get('attachments', [])
+            if attachments:
+                media_data, media_type = extract_image_from_attachments(attachments)
+                has_image = media_data is not None
+        
+        if not content and not has_image:
+            return jsonify({'error': 'Message content or image is required'}), 400
+        
+        # If only image, use default prompt
+        if not content and has_image:
+            content = "What's in this image?"
         
         # Sanitize content
         content = sanitize_message_content(content)
@@ -227,6 +363,11 @@ def send_message_to_agent(agent_id):
         # Log request
         logger.info(f"💬 Discord → Agent {agent_id[:8]}... | User: {username} | Session: {session_id}")
         logger.info(f"   Message: {content[:100]}{'...' if len(content) > 100 else ''}")
+        if has_image:
+            if media_data and media_data.startswith('http'):
+                logger.info(f"   📸 Image URL: {media_data[:80]}...")
+            else:
+                logger.info(f"   📸 Image: {len(media_data) if media_data else 0} chars (base64), Type: {media_type}")
         
         # Check if agent exists (if using Postgres multi-agent)
         if _postgres_manager:
@@ -247,14 +388,17 @@ def send_message_to_agent(agent_id):
                     session_id=session_id,
                     message_type='inbox',  # Discord messages are "inbox" type
                     include_history=True,
-                    history_limit=12  # Keep context window reasonable
+                    history_limit=12,  # Keep context window reasonable
+                    media_data=media_data,  # Image data (base64 or URL)
+                    media_type=media_type   # MIME type
                 )
             )
         finally:
             loop.close()
         
-        # Extract response
-        response_content = result.get('content', 'I apologize, but I encountered an error processing your message.')
+        # Extract response - handle both 'content' and 'response' keys
+        response_content = result.get('response') or result.get('content', 
+            'I apologize, but I encountered an error processing your message.')
         thinking = result.get('thinking', None)
         tool_calls = result.get('tool_calls', [])
         
@@ -263,10 +407,12 @@ def send_message_to_agent(agent_id):
             'model': result.get('model', 'unknown'),
             'tokens': result.get('usage', {}).get('total_tokens', 0),
             'cost': result.get('cost', 0.0),
-            'session_id': session_id
+            'session_id': session_id,
+            'has_image': has_image
         }
         
-        logger.info(f"✅ Discord ← Agent {agent_id[:8]}... | {metadata['tokens']} tokens | ${metadata['cost']:.6f}")
+        logger.info(f"✅ Discord ← Agent {agent_id[:8]}... | {metadata['tokens']} tokens | ${metadata['cost']:.6f}" + 
+                   (" | 📸 Image processed" if has_image else ""))
         
         return jsonify({
             'success': True,
@@ -510,6 +656,11 @@ def discord_health():
     {
         "status": "healthy",
         "discord_api": "enabled",
+        "features": {
+            "text": true,
+            "multimodal": true,
+            "images": true
+        },
         "components": {
             "consciousness_loop": true,
             "state_manager": true,
@@ -522,6 +673,13 @@ def discord_health():
     return jsonify({
         'status': 'healthy',
         'discord_api': 'enabled',
+        'features': {
+            'text': True,
+            'multimodal': True,
+            'images': True,
+            'max_image_size_mb': MAX_IMAGE_SIZE / (1024 * 1024),
+            'supported_formats': list(SUPPORTED_IMAGE_FORMATS)
+        },
         'components': {
             'consciousness_loop': _consciousness_loop is not None,
             'state_manager': _state_manager is not None,

@@ -1833,10 +1833,24 @@ send_message: false
         include_history: bool = True,
         history_limit: int = 12,
         message_type: str = 'inbox',
-        max_tool_calls: Optional[int] = None  # Override max tool calls (lower for heartbeats)
+        max_tool_calls: Optional[int] = None,  # Override max tool calls (lower for heartbeats)
+        media_data: Optional[str] = None,  # Base64 encoded image or URL
+        media_type: Optional[str] = None   # MIME type (e.g., 'image/jpeg')
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """
         Process message with REAL STREAMING support!
+        NOW WITH MULTIMODAL SUPPORT for images!
+        
+        Args:
+            user_message: User's text message
+            session_id: Session identifier
+            model: Model to use (defaults to self.default_model)
+            include_history: Include conversation history
+            history_limit: Max history messages
+            message_type: 'inbox' or 'system' (for heartbeats)
+            max_tool_calls: Override max tool calls
+            media_data: Base64 encoded image data or URL
+            media_type: MIME type of the image (e.g., 'image/jpeg')
         
         Yields events as they happen:
         - {"type": "thinking", "content": "..."}
@@ -1861,6 +1875,28 @@ send_message: false
         
         model = model or self.default_model
         
+        # MULTIMODAL SUPPORT: Check if model supports images directly
+        from core.vision_prompt import is_multimodal_model
+        model_is_multimodal = is_multimodal_model(model)
+        vision_description = None
+        include_image_directly = False
+        
+        # Handle media/image data
+        if media_data and media_type:
+            if model_is_multimodal:
+                # Main model can process images directly
+                print(f"⏳ MULTIMODAL MODE (streaming): Model {model} supports images directly")
+                include_image_directly = True
+            else:
+                # Use separate vision model to analyze image first
+                print(f"⏳ VISION ANALYSIS (streaming): Model {model} is text-only, using vision model")
+                vision_description = await self._analyze_media_with_vision(
+                    media_data=media_data,
+                    media_type=media_type,
+                    user_prompt=user_message
+                )
+                print(f"✅ Vision analysis complete (streaming)! Injecting into context...")
+        
         # Build context (same as regular process_message)
         messages = self._build_context_messages(
             session_id=session_id,
@@ -1880,15 +1916,43 @@ send_message: false
         # Determine message role
         msg_role = 'system' if message_type == 'system' else 'user'
 
-        # Add user message TO CONTEXT (CRITICAL: must be in messages sent to API!)
-        messages.append({
-            "role": msg_role,
-            "content": user_message
-        })
+        # Add user message TO CONTEXT (with image if multimodal!)
+        if include_image_directly:
+            # Multimodal model - include image directly in message
+            print(f"✅ Including image directly in message for multimodal model (streaming)")
+            messages.append({
+                "role": msg_role,
+                "content": [
+                    {"type": "text", "text": user_message},
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:{media_type};base64,{media_data}" if not media_data.startswith('http') else media_data
+                        }
+                    }
+                ]
+            })
+        elif vision_description:
+            # Text-only model - inject vision description
+            final_user_message = f"{user_message}\n\n[Image Context: {vision_description}]"
+            print(f"✅ Vision description injected into user message (streaming)")
+            messages.append({
+                "role": msg_role,
+                "content": final_user_message
+            })
+        else:
+            # No media - standard text message
+            messages.append({
+                "role": msg_role,
+                "content": user_message
+            })
         print(f"✅ User message added to context\n")
 
         # Store user message to database
         user_msg_id = f"msg-{uuid.uuid4()}"
+        
+        # Add indicator if image was included
+        storage_content = f"{user_message} [Image attached]" if media_data else user_message
 
         # Log full message for debugging
         print(f"\n{'='*60}")
@@ -1897,6 +1961,10 @@ send_message: false
         print(f"Session: {session_id}")
         print(f"Model: {model}")
         print(f"Message Type: {message_type}")
+        print(f"Has Media: {'YES 📸' if media_data else 'No'}")
+        if media_data:
+            print(f"Media Type: {media_type}")
+            print(f"Multimodal Direct: {include_image_directly}")
         print(f"Message Length: {len(user_message)} chars")
         print(f"Full Message: {user_message}")
         print(f"{'='*60}\n")
@@ -1906,7 +1974,7 @@ send_message: false
             agent_id=self.agent_id,
             session_id=session_id,
             role=msg_role,
-            content=user_message,
+            content=storage_content,  # Use storage_content which includes [Image attached] indicator
             message_id=user_msg_id,
             message_type=message_type
         )
