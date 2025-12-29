@@ -41,6 +41,7 @@ from tools.memory_tools import MemoryTools
 from core.consciousness_loop import ConsciousnessLoop
 from core.consciousness_broadcast import init_consciousness_broadcast
 from core.version_manager import VersionManager
+from core.soma_client import SOMAClient, create_soma_client
 
 # Import route blueprints
 from api.routes_models import models_bp
@@ -255,6 +256,16 @@ except Exception as e:
     logger.warning(f"⚠️  MCP/Code Execution init failed: {e}")
     logger.info("   Continuing without MCP features...")
 
+# 🫀 SOMA Physiological Simulation Client (optional)
+soma_client = None
+soma_url = os.getenv("SOMA_URL", "http://localhost:3002")
+try:
+    soma_client = create_soma_client(base_url=soma_url)
+    logger.info(f"🫀 SOMA client initialized: {soma_url}")
+except Exception as e:
+    logger.info(f"ℹ️  SOMA client not initialized: {e}")
+    logger.info("   Continuing without SOMA physiological simulation...")
+
 consciousness_loop = ConsciousnessLoop(
     state_manager=state_manager,
     openrouter_client=openrouter_client,
@@ -265,7 +276,8 @@ consciousness_loop = ConsciousnessLoop(
     message_manager=message_manager,  # 🏴‍☠️ PostgreSQL!
     memory_engine=memory_engine,  # ⚡ Nested Learning (if available)!
     code_executor=code_executor,  # 🔥 Code Execution (if available)!
-    mcp_client=mcp_client  # 🔥 MCP Client (if available)!
+    mcp_client=mcp_client,  # 🔥 MCP Client (if available)!
+    soma_client=soma_client  # 🫀 SOMA Physiological Simulation (if available)!
 )
 
 print("✅ Substrate AI Server initialized!")

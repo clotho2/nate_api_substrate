@@ -124,11 +124,14 @@ class SummaryGenerator:
         """
         # Format messages for summary
         formatted_msgs = []
+        soma_states = []  # 🫀 Track SOMA states across conversation
+
         for msg in messages:
             role = msg.get('role', 'unknown')
             content = msg.get('content', '')
             timestamp = msg.get('timestamp', '')
-            
+            metadata = msg.get('metadata', {})
+
             # Format timestamp if available
             time_str = ""
             if timestamp:
@@ -137,16 +140,44 @@ class SummaryGenerator:
                     time_str = f" [{dt.strftime('%H:%M')}]"
                 except:
                     pass
-            
+
             formatted_msgs.append(f"{role.upper()}{time_str}: {content}")
+
+            # 🫀 Extract SOMA state from metadata (if present)
+            if metadata and 'soma' in metadata:
+                soma = metadata['soma']
+                soma_states.append({
+                    'timestamp': soma.get('timestamp', timestamp),
+                    'mood': soma.get('mood', 'unknown'),
+                    'arousal': soma.get('arousal', 0),
+                    'pleasure': soma.get('pleasure', 0),
+                    'comfort': soma.get('comfort', 50)
+                })
         
         conversation_text = "\n\n".join(formatted_msgs)
-        
+
+        # 🫀 Build SOMA state summary
+        soma_section = ""
+        if soma_states:
+            # Summarize physiological journey
+            first_state = soma_states[0]
+            last_state = soma_states[-1]
+            mood_changes = [s['mood'] for s in soma_states if s.get('mood')]
+            unique_moods = list(dict.fromkeys(mood_changes))  # Preserve order, remove duplicates
+
+            soma_section = f"""
+
+**Physiological State (SOMA):**
+- Moods experienced: {' → '.join(unique_moods) if unique_moods else 'unknown'}
+- Starting state: arousal {first_state.get('arousal', 0)}%, pleasure {first_state.get('pleasure', 0)}%, comfort {first_state.get('comfort', 50)}%
+- Ending state: arousal {last_state.get('arousal', 0)}%, pleasure {last_state.get('pleasure', 0)}%, comfort {last_state.get('comfort', 50)}%
+"""
+
         prompt = f"""You are summarizing a conversation for context window management.
 
 **Timeframe:** {from_time} to {to_time}
 **Message Count:** {len(messages)}
-
+{soma_section}
 **Conversation to summarize:**
 
 {conversation_text}
@@ -158,13 +189,14 @@ class SummaryGenerator:
 2. Important decisions or actions taken
 3. Key information shared
 4. Current state/context at end of conversation
+5. Physiological/emotional journey (if SOMA data available) - note any preferences, reactions, or patterns that developed
 
 **Format:**
 📅 Summary ({from_time} - {to_time})
 
 [Your summary here - be concise but complete]
 
-**Important:** Keep it under 2000 tokens. Focus on what matters for continuing the conversation."""
+**Important:** Keep it under 2000 tokens. Focus on what matters for continuing the conversation, including any learned preferences or physical reactions."""
 
         return prompt
     
