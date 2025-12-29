@@ -68,9 +68,10 @@ def get_vision_model() -> str:
     return "google/gemini-2.0-flash-exp:free"
 
 # List of known multimodal models that can process images directly
+# Note: Use base model names without version suffixes for broader matching
 MULTIMODAL_MODELS = [
-    "mistralai/mistral-large-2512",
-    "mistralai/pixtral-large-2411",
+    "mistralai/mistral-large",  # Mistral Large 3+ (multimodal)
+    "mistralai/pixtral",  # Pixtral models (vision-first)
     "anthropic/claude-3",
     "anthropic/claude-3-5",
     "openai/gpt-4o",
@@ -78,6 +79,7 @@ MULTIMODAL_MODELS = [
     "google/gemini",
     "grok-4",
     "meta-llama/llama-3.2-90b-vision",
+    "meta-llama/llama-3.2-11b-vision",
 ]
 
 def is_multimodal_model(model: str) -> bool:

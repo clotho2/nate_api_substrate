@@ -243,10 +243,14 @@ def get_agent_config(agent_id):
         # Get ACTUAL config from DB (not just defaults!)
         agent_state = _state_manager.get_agent_state()
         stored_config = agent_state.get('config', {})
-        
+
+        # Get model with CORRECT priority: env var > stored > default
+        # This ensures .env settings always take precedence over DB
+        env_model = get_model_or_default()  # From MODEL_NAME or DEFAULT_LLM_MODEL
+
         # Merge with defaults (for missing fields)
         default_config = {
-            'model': get_model_or_default(),
+            'model': env_model,  # Env var takes precedence!
             'temperature': 0.7,
             'max_tokens': None,
             'top_p': 1.0,
@@ -257,9 +261,10 @@ def get_agent_config(agent_id):
             'reasoning_enabled': False,
             'max_reasoning_tokens': None
         }
-        
-        # Override defaults with stored values
+
+        # Override defaults with stored values, BUT keep env var model!
         config = {**default_config, **stored_config}
+        config['model'] = env_model  # Force env var model to take precedence!
         
         logger.info(f"📊 GET /config → Returning agent config for '{agent_id}'")
         logger.info(f"   Model: {config['model']} | Reasoning: {config.get('reasoning_enabled', False)}")
