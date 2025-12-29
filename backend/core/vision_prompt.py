@@ -69,25 +69,55 @@ def get_vision_model() -> str:
 
 # List of known multimodal models that can process images directly
 # Note: Use base model names without version suffixes for broader matching
+# The is_multimodal_model() function uses substring matching, so "mistralai/mistral-large"
+# will match "mistralai/mistral-large-2512", "mistralai/mistral-large-latest", etc.
 MULTIMODAL_MODELS = [
-    "mistralai/mistral-large",  # Mistral Large 3+ (multimodal)
+    # Mistral models (multimodal since Mistral Large 2/3)
+    "mistralai/mistral-large",  # Mistral Large 2+, 3+ (multimodal)
     "mistralai/pixtral",  # Pixtral models (vision-first)
+    "mistral-large",  # Short form
+    "pixtral",  # Short form
+    
+    # Anthropic Claude models
     "anthropic/claude-3",
     "anthropic/claude-3-5",
+    "claude-3",  # Short form
+    
+    # OpenAI models
     "openai/gpt-4o",
     "openai/gpt-4-vision",
+    "openai/gpt-4-turbo",  # Also multimodal
+    "gpt-4o",  # Short form
+    "gpt-4-vision",  # Short form
+    
+    # Google models
     "google/gemini",
+    "gemini",  # Short form
+    
+    # xAI Grok models
     "grok-4",
+    "grok-2-vision",
+    "x-ai/grok",
+    
+    # Meta Llama vision models
     "meta-llama/llama-3.2-90b-vision",
     "meta-llama/llama-3.2-11b-vision",
+    "llama-3.2-vision",  # Short form
+    
+    # Qwen vision models
+    "qwen/qwen-2-vl",
+    "qwen-vl",
 ]
 
 def is_multimodal_model(model: str) -> bool:
     """
     Check if a model supports direct image processing (multimodal).
+    
+    Uses substring matching so base model names match versioned variants.
+    For example: "mistralai/mistral-large" matches "mistralai/mistral-large-2512"
 
     Args:
-        model: Model name/ID
+        model: Model name/ID (e.g., "mistralai/mistral-large-2512")
 
     Returns:
         True if model can process images directly
