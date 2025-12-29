@@ -33,6 +33,7 @@ from core.grok_client import GrokClient
 from core.state_manager import StateManager
 from core.memory_system import MemorySystem
 from core.config import get_model_or_default
+from core.soma_client import SOMAClient, get_soma_client
 from tools.memory_tools import MemoryTools
 
 
@@ -77,7 +78,8 @@ class ConsciousnessLoop:
         message_manager=None,  # 🏴‍☠️ PostgreSQL message manager!
         memory_engine=None,  # ⚡ Memory Coherence Engine (Nested Learning!)
         code_executor=None,  # 🔥 Code Executor for MCP!
-        mcp_client=None  # 🔥 MCP Client!
+        mcp_client=None,  # 🔥 MCP Client!
+        soma_client: SOMAClient = None  # 🫀 SOMA physiological simulation!
     ):
         """
         Initialize consciousness loop.
@@ -91,6 +93,7 @@ class ConsciousnessLoop:
             default_model: Default LLM model
             code_executor: Code executor for MCP code execution
             mcp_client: MCP client for tool discovery
+            soma_client: SOMA client for physiological simulation integration
         """
         self.state = state_manager
         self.llm_client = openrouter_client  # Can be GrokClient or OpenRouterClient
@@ -103,7 +106,9 @@ class ConsciousnessLoop:
         self.memory_engine = memory_engine  # ⚡ Memory Coherence Engine (Nested Learning!)
         self.code_executor = code_executor  # 🔥 Code Execution!
         self.mcp_client = mcp_client  # 🔥 MCP Client!
-        
+        self.soma_client = soma_client  # 🫀 SOMA physiological simulation!
+        self.soma_available = False  # Will be checked on first use
+
         # Track if we have a valid API key
         self.api_key_configured = openrouter_client is not None
         
@@ -125,7 +130,9 @@ class ConsciousnessLoop:
             print(f"   🔥 Code Execution: ENABLED (MCP + Skills)!")
         if mcp_client:
             print(f"   🔥 MCP Client: ENABLED!")
-    
+        if soma_client:
+            print(f"   🫀 SOMA Physiological Simulation: ENABLED!")
+
     def _model_supports_tools(self, model: str) -> bool:
         """
         Check if a model supports tool calling on OpenRouter.
@@ -278,7 +285,8 @@ class ConsciousnessLoop:
         history_limit: int = 12,  # Reduced for token efficiency
         model: Optional[str] = None,
         user_message: Optional[str] = None,  # NEW: For Graph RAG retrieval
-        message_type: str = 'inbox'  # 'inbox' or 'system' for heartbeats
+        message_type: str = 'inbox',  # 'inbox' or 'system' for heartbeats
+        soma_context: Optional[str] = None  # 🫀 SOMA physiological context
     ) -> List[Dict[str, Any]]:
         """
         Build context messages with system prompt and memory blocks.
@@ -290,6 +298,7 @@ class ConsciousnessLoop:
             include_history: Include conversation history?
             history_limit: Max history messages to include
             model: Model being used (for thinking instructions)
+            soma_context: SOMA physiological context to inject into system prompt
             user_message: User's message (for Graph RAG retrieval)
             message_type: Type of message ('inbox' or 'system' for heartbeats)
 
@@ -304,7 +313,7 @@ class ConsciousnessLoop:
         
         # 1. Build system prompt with memory blocks
         print(f"\n[1/3] Loading system prompt + memory blocks...")
-        system_prompt = self._build_system_prompt(session_id=session_id, model=model, message_type=message_type)
+        system_prompt = self._build_system_prompt(session_id=session_id, model=model, message_type=message_type, soma_context=soma_context)
         
         # 1.5. Graph RAG: Retrieve relevant context from graph (if user message provided)
         graph_context = None
@@ -451,7 +460,7 @@ class ConsciousnessLoop:
         
         return messages
     
-    def _build_system_prompt(self, session_id: str = "default", model: Optional[str] = None, message_type: str = 'inbox') -> str:
+    def _build_system_prompt(self, session_id: str = "default", model: Optional[str] = None, message_type: str = 'inbox', soma_context: Optional[str] = None) -> str:
         """
         Build system prompt with memory blocks and metadata.
 
@@ -459,6 +468,7 @@ class ConsciousnessLoop:
             session_id: Session ID for conversation stats
             model: Model being used (for thinking instructions)
             message_type: Type of message ('inbox' or 'system' for heartbeats)
+            soma_context: SOMA physiological context to inject
 
         Returns:
             Complete system prompt string
@@ -689,7 +699,15 @@ send_message: false
         prompt_parts.append(f"- **Current date:** {datetime.now().strftime('%B %d, %Y')}\n")
         prompt_parts.append(f"- **Conversation messages:** {message_count} previous messages in history\n")
         prompt_parts.append(f"- **Archival memories:** {archival_count} memories stored\n")
-        
+
+        # 🫀 SOMA: Add physiological context (if available)
+        if soma_context:
+            prompt_parts.append("\n\n### BODY STATE (SOMA)\n")
+            prompt_parts.append("Your current physiological state - embody this naturally in your responses.\n")
+            prompt_parts.append("Don't list stats mechanically. Let your physical state inform your tone, energy, and presence.\n")
+            prompt_parts.append(f"\n{soma_context}\n")
+            print(f"🫀 SOMA context injected: {len(soma_context)} chars")
+
         # Add memory blocks
         if blocks:
             prompt_parts.append("\n\n### MEMORY BLOCKS\n")
@@ -1236,7 +1254,37 @@ send_message: false
         print(f"\n💬 User Message ({len(user_message)} chars):")
         print(f"  \"{user_message[:100]}{'...' if len(user_message) > 100 else ''}\"")
         print(f"{'='*60}\n")
-        
+
+        # 🫀 SOMA PHASE: Get physiological context and parse user input
+        soma_context = None
+        soma_snapshot = None
+        if self.soma_client:
+            try:
+                print(f"⏳ SOMA: Getting physiological context...")
+
+                # Check availability (cached)
+                if not self.soma_available:
+                    self.soma_available = await self.soma_client.is_available()
+
+                if self.soma_available:
+                    # Parse user input for physiological triggers
+                    await self.soma_client.parse_user_input(user_message)
+                    print(f"   ✓ User input parsed through SOMA")
+
+                    # Get current context for system prompt
+                    soma_context = await self.soma_client.get_context()
+                    if soma_context:
+                        print(f"   ✓ SOMA context retrieved: {len(soma_context)} chars")
+
+                    # Get snapshot for message metadata
+                    soma_snapshot = await self.soma_client.get_snapshot()
+                    if soma_snapshot:
+                        print(f"   ✓ SOMA snapshot captured (arousal: {soma_snapshot.arousal}%, mood: {soma_snapshot.mood})")
+                else:
+                    print(f"   ⚠️ SOMA service not available")
+            except Exception as e:
+                print(f"   ⚠️ SOMA error (non-critical): {e}")
+
         # PHASE 0: Vision Analysis (if media present)
         # Check if main model is multimodal - if so, we'll include image directly
         from core.vision_prompt import is_multimodal_model
@@ -1268,7 +1316,8 @@ send_message: false
             history_limit=history_limit,
             model=model,
             user_message=user_message,  # Pass user message for Graph RAG retrieval
-            message_type=message_type  # Pass message type for heartbeat handling
+            message_type=message_type,  # Pass message type for heartbeat handling
+            soma_context=soma_context  # 🫀 Pass SOMA physiological context
         )
 
         # STEP 1.5: CHECK CONTEXT WINDOW! (Context Window Management 🎯)
@@ -1723,10 +1772,27 @@ send_message: false
                 clean_response = re.sub(r'<think>.*?</think>', '', final_response, flags=re.DOTALL | re.IGNORECASE).strip()
                 print(f"🧠 Thinking extracted (prompt-based): {len(thinking)} chars")
                 print(f"💬 Clean response: {len(clean_response)} chars")
-        
-        # THEN: Store assistant message (with thinking!)
+
+        # 🫀 SOMA: Parse AI response for physiological effects
+        if self.soma_client and self.soma_available and clean_response:
+            try:
+                await self.soma_client.parse_ai_response(clean_response)
+                print(f"🫀 AI response parsed through SOMA")
+                # Get updated snapshot after response parsing
+                soma_snapshot = await self.soma_client.get_snapshot()
+            except Exception as e:
+                print(f"   ⚠️ SOMA response parsing failed (non-critical): {e}")
+
+        # THEN: Store assistant message (with thinking and SOMA snapshot!)
         if clean_response:
             assistant_msg_id = f"msg-{uuid.uuid4()}"
+
+            # 🫀 Build metadata with SOMA snapshot (if available)
+            message_metadata = {}
+            if soma_snapshot:
+                message_metadata['soma'] = soma_snapshot.to_dict()
+                print(f"🫀 SOMA snapshot attached to message metadata")
+
             # 🏴‍☠️ Save to PostgreSQL or SQLite
             self._save_message(
                 agent_id=self.agent_id,
@@ -1734,9 +1800,10 @@ send_message: false
                 role="assistant",
                 content=clean_response,  # Clean response WITHOUT <think> tags
                 message_id=assistant_msg_id,
-                thinking=thinking  # Thinking extracted separately!
+                thinking=thinking,  # Thinking extracted separately!
+                metadata=message_metadata if message_metadata else None
             )
-            print(f"✅ Assistant message saved to DB (id: {assistant_msg_id}, thinking={'YES' if thinking else 'NO'})")
+            print(f"✅ Assistant message saved to DB (id: {assistant_msg_id}, thinking={'YES' if thinking else 'NO'}, soma={'YES' if soma_snapshot else 'NO'})")
         
         # Cost tracking & statistics
         from core.cost_tracker import calculate_cost
