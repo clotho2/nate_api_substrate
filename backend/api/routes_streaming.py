@@ -178,7 +178,7 @@ def stream_chat():
                         session_id=session_id,
                         model=model,
                         include_history=True,
-                        history_limit=12,
+                        history_limit=20,
                         message_type=message_type,
                         media_data=media_data,  # Image data (base64 or URL)
                         media_type=media_type   # MIME type
