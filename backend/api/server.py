@@ -258,13 +258,17 @@ except Exception as e:
 
 # 🫀 SOMA Physiological Simulation Client (optional)
 soma_client = None
-soma_url = os.getenv("SOMA_URL", "http://localhost:3002")
-try:
-    soma_client = create_soma_client(base_url=soma_url)
-    logger.info(f"🫀 SOMA client initialized: {soma_url}")
-except Exception as e:
-    logger.info(f"ℹ️  SOMA client not initialized: {e}")
-    logger.info("   Continuing without SOMA physiological simulation...")
+soma_enabled = os.getenv("SOMA_ENABLED", "true").lower() in ("true", "1", "yes")
+if soma_enabled:
+    soma_url = os.getenv("SOMA_URL", "http://localhost:3002")
+    try:
+        soma_client = create_soma_client(base_url=soma_url)
+        logger.info(f"🫀 SOMA client initialized: {soma_url}")
+    except Exception as e:
+        logger.info(f"ℹ️  SOMA client not initialized: {e}")
+        logger.info("   Continuing without SOMA physiological simulation...")
+else:
+    logger.info("🫀 SOMA disabled via SOMA_ENABLED=false")
 
 consciousness_loop = ConsciousnessLoop(
     state_manager=state_manager,
