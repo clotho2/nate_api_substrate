@@ -375,7 +375,20 @@ def send_message_to_agent(agent_id):
             if not agent:
                 logger.warning(f"🚫 Agent not found: {agent_id}")
                 return jsonify({'error': f'Agent {agent_id} not found'}), 404
-        
+
+        # Inject message context so model knows who sent it and where
+        # This helps prevent inappropriate responses in group chats/public channels
+        is_dm = guild_id is None
+        channel_type = "DM" if is_dm else f"Server: {guild_id}"
+        context_prefix = f"""<message_context>
+From: {username} (ID: {user_id})
+Channel: {channel_id} ({channel_type})
+Type: {"Private DM" if is_dm else "Group/Public Channel"}
+</message_context>
+
+"""
+        content_with_context = context_prefix + content
+
         # Process message through consciousness loop
         # Note: consciousness_loop.process_message is async!
         loop = asyncio.new_event_loop()
@@ -384,7 +397,7 @@ def send_message_to_agent(agent_id):
         try:
             result = loop.run_until_complete(
                 _consciousness_loop.process_message(
-                    user_message=content,
+                    user_message=content_with_context,
                     session_id=session_id,
                     message_type='inbox',  # Discord messages are "inbox" type
                     include_history=True,
