@@ -2496,7 +2496,8 @@ send_message: false
                         # Extract usage info (OpenRouter sends it in final chunk)
                         if 'usage' in chunk:
                             stream_usage = chunk['usage']
-                            print(f"📊 Token usage from stream: {stream_usage}")
+                            if stream_usage:
+                                print(f"📊 Token usage from stream: {stream_usage}")
                         
                         # Check if stream is finished (OpenRouter sends finish_reason)
                         if choice.get('finish_reason'):
