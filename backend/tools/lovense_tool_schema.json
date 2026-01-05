@@ -1,0 +1,90 @@
+{
+  "name": "lovense_tool",
+  "description": "Control Lovense hardware for intimate physical feedback. Supports vibration patterns, rotation, and pump functions via Game Mode API. Connect toys using Lovense Remote app in Game Mode. Actions: get_toys (list connected devices), vibrate (set intensity 0-20), pattern (custom sequences), preset (pulse/wave/fireworks/earthquake), rotate (for Nora etc), pump (for Max etc), multi_function (combine functions), stop (emergency stop all).",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "action": {
+        "type": "string",
+        "description": "Action to perform",
+        "enum": [
+          "get_toys",
+          "vibrate",
+          "pattern",
+          "preset",
+          "rotate",
+          "pump",
+          "multi_function",
+          "stop"
+        ]
+      },
+      "intensity": {
+        "type": "integer",
+        "description": "Intensity level 0-20 (0=off, 20=max). Used for vibrate, rotate, and pump actions.",
+        "minimum": 0,
+        "maximum": 20
+      },
+      "duration": {
+        "type": "integer",
+        "description": "Duration in seconds (0=continuous until stopped). Works with all actions.",
+        "minimum": 0,
+        "default": 0
+      },
+      "toy": {
+        "type": "string",
+        "description": "Target specific toy by ID (from get_toys). Empty string targets all connected toys.",
+        "default": ""
+      },
+      "pattern_sequence": {
+        "type": "string",
+        "description": "Semicolon-separated intensity values (0-20) for pattern action. Example: '5;10;15;20;15;10;5' creates a wave pattern."
+      },
+      "interval_ms": {
+        "type": "integer",
+        "description": "Milliseconds between pattern steps (minimum 100ms). Default: 100.",
+        "minimum": 100,
+        "default": 100
+      },
+      "preset_name": {
+        "type": "string",
+        "description": "Built-in pattern name for preset action",
+        "enum": ["pulse", "wave", "fireworks", "earthquake"]
+      },
+      "vibrate_intensity": {
+        "type": "integer",
+        "description": "Vibration intensity 0-20 for multi_function action",
+        "minimum": 0,
+        "maximum": 20
+      },
+      "rotate_intensity": {
+        "type": "integer",
+        "description": "Rotation intensity 0-20 for multi_function action (toys with rotation motor)",
+        "minimum": 0,
+        "maximum": 20
+      },
+      "pump_intensity": {
+        "type": "integer",
+        "description": "Pump/inflation level 0-20 for multi_function action (toys with pump like Max)",
+        "minimum": 0,
+        "maximum": 20
+      },
+      "loop_running_sec": {
+        "type": "number",
+        "description": "Seconds to run per cycle when looping vibration patterns",
+        "minimum": 0
+      },
+      "loop_pause_sec": {
+        "type": "number",
+        "description": "Seconds to pause between loop cycles",
+        "minimum": 0
+      },
+      "loop_cycles": {
+        "type": "integer",
+        "description": "Number of loop cycles (0=infinite loop)",
+        "minimum": 0,
+        "default": 0
+      }
+    },
+    "required": ["action"]
+  }
+}

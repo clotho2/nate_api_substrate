@@ -23,6 +23,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from tools.discord_tool import discord_tool as _discord_tool
 from tools.spotify_control import spotify_control as _spotify_control
 from tools.send_voice_message import send_voice_message as _send_voice_message
+from tools.lovense_tool import lovense_tool as _lovense_tool
 from tools.web_search import web_search as _web_search
 from tools.fetch_webpage import fetch_webpage as _fetch_webpage
 
@@ -155,9 +156,39 @@ class IntegrationTools:
             }
 
     # ============================================
+    # LOVENSE CONTROL
+    # ============================================
+
+    def lovense_tool(self, **kwargs) -> Dict[str, Any]:
+        """
+        Control Lovense hardware for intimate physical feedback.
+
+        Actions:
+        - get_toys: List connected devices with battery status
+        - vibrate: Set vibration intensity (0-20)
+        - pattern: Play custom vibration patterns
+        - preset: Play built-in patterns (pulse/wave/fireworks/earthquake)
+        - rotate: Control rotation (toys with rotation motor)
+        - pump: Control pump/inflation (toys with pump)
+        - multi_function: Combine vibrate/rotate/pump
+        - stop: Stop all functions
+
+        Returns:
+            Dict with status and result
+        """
+        try:
+            result = _lovense_tool(**kwargs)
+            return result
+        except Exception as e:
+            return {
+                "status": "error",
+                "message": f"Lovense tool error: {str(e)}"
+            }
+
+    # ============================================
     # SPOTIFY CONTROL
     # ============================================
-    
+
     def spotify_control(self, **kwargs) -> Dict[str, Any]:
         """
         Control Spotify playback and manage playlists.
@@ -427,7 +458,8 @@ class IntegrationTools:
         tool_names = [
             'discord_tool',
             'spotify_control',
-            'send_voice_message'
+            'send_voice_message',
+            'lovense_tool'
         ]
         
         for tool_name in tool_names:
