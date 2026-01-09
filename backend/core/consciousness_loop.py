@@ -2379,7 +2379,7 @@ send_message: false
                 # STREAMING LOOP! 🚀
         tool_call_count = 0
         all_tool_calls = []
-        final_response = ""
+        final_response = ""  # Note: This is reset at the start of each iteration
         thinking = None  # Initialize thinking variable (CRITICAL: used later!)
         
         # Token usage tracking (for cost display!)
@@ -2420,6 +2420,11 @@ send_message: false
             # Call OpenRouter with STREAMING!
             try:
                 content_chunks = []
+                # CRITICAL: Reset final_response at start of each iteration!
+                # Otherwise, if model calls tools AND generates content, the content
+                # from the tool-calling iteration would be concatenated with the
+                # final response, causing duplicate/garbled output.
+                final_response = ""
                 tool_calls_in_response = []
                 stream_finished = False
                 thinking_chunks = []  # For native reasoning models!
