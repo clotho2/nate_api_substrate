@@ -17,7 +17,7 @@ Security:
 - All operations are read-only
 - Protected files (secrets, .env) are redacted
 - Path traversal is blocked
-- Only operates within the substrate directory
+- Only operates within /opt/aicara (all services)
 """
 
 import os
@@ -45,6 +45,9 @@ SUBSTRATE_ROOT = Path(__file__).parent.parent.parent.resolve()
 BACKEND_ROOT = SUBSTRATE_ROOT / "backend"
 LOGS_DIR = SUBSTRATE_ROOT / "logs"
 
+# Security boundary - allow access to all services in /opt/aicara
+ALLOWED_ROOT = Path("/opt/aicara").resolve()
+
 # Protected files - contents will be redacted
 PROTECTED_PATTERNS = [
     r'\.env$',
@@ -56,6 +59,7 @@ PROTECTED_PATTERNS = [
     r'api_key',
     r'password',
     r'token',
+    r'log',  # Redact log content to prevent sensitive data exposure
 ]
 
 # Files that cannot be read at all
@@ -93,9 +97,9 @@ def sanitize_path(requested_path: str) -> Optional[Path]:
         else:
             full_path = (SUBSTRATE_ROOT / requested_path).resolve()
 
-        # Check if path is within allowed directories
+        # Check if path is within allowed directories (/opt/aicara)
         try:
-            full_path.relative_to(SUBSTRATE_ROOT)
+            full_path.relative_to(ALLOWED_ROOT)
         except ValueError:
             return None
 
@@ -706,6 +710,7 @@ async def main():
     server = create_server()
     print(f"🔧 Nate Dev MCP Server starting...", file=sys.stderr)
     print(f"   Substrate root: {SUBSTRATE_ROOT}", file=sys.stderr)
+    print(f"   Allowed access: {ALLOWED_ROOT}", file=sys.stderr)
     print(f"   Level: 1 (Read-Only)", file=sys.stderr)
     async with stdio_server() as (read_stream, write_stream):
         await server.run(read_stream, write_stream, server.create_initialization_options())
