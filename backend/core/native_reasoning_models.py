@@ -13,9 +13,13 @@ NATIVE_REASONING_MODELS = {
     'deepseek/deepseek-reasoner',
     'moonshotai/kimi-k2-thinking',
     'moonshotai/moonshot-v1-thinking',
-    # Venice AI thinking models
+    # Venice AI thinking/reasoning models
     'qwen3-235b-a22b-thinking-2507',
     'qwen3-235b-a22b-thinking',
+    'glm-4.7',
+    'glm-4-7',
+    'glm4.7',
+    'glm4-7',
 }
 
 # NOTE: Models NOT in this list (like Mistral Large 3) are treated as standard models
