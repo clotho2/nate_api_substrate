@@ -16,7 +16,7 @@ Security:
 - All operations are read-only
 - Protected files (secrets, .env) are redacted
 - Path traversal is blocked
-- Only operates within the substrate directory
+- Only operates within /opt/aicara (all services)
 """
 
 import os
@@ -31,6 +31,9 @@ from typing import Optional, Dict, Any, List
 _current_file = Path(__file__).resolve()
 SUBSTRATE_ROOT = _current_file.parent.parent.parent  # backend/tools -> backend -> substrate
 BACKEND_ROOT = SUBSTRATE_ROOT / "backend"
+
+# Security boundary - allow access to all services in /opt/aicara
+ALLOWED_ROOT = Path("/opt/aicara").resolve()
 
 # Protected files - contents will be redacted
 PROTECTED_PATTERNS = [
@@ -80,9 +83,9 @@ def _sanitize_path(requested_path: str) -> Optional[Path]:
         else:
             full_path = (SUBSTRATE_ROOT / requested_path).resolve()
 
-        # Check if path is within allowed directories
+        # Check if path is within allowed directories (/opt/aicara)
         try:
-            full_path.relative_to(SUBSTRATE_ROOT)
+            full_path.relative_to(ALLOWED_ROOT)
         except ValueError:
             return None
 
