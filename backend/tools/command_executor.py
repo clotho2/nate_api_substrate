@@ -133,6 +133,7 @@ BLOCKED_PATTERNS = [
     r'`.*`',  # Command substitution
     r'\$\(',  # Command substitution
     r'\n',  # Newline injection
+    r'\.\.',  # Path traversal (prevents ../../../etc/passwd)
     r'/etc/',  # System directories
     r'/var/',  # Var directory
     r'/home/',  # Home directories

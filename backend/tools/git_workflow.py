@@ -336,10 +336,24 @@ def automated_workflow(
     # Handle different commit statuses
     if commit_result["status"] == "info":
         # No changes to commit - clean up branch and return
-        _run_git_command(["git", "checkout", base_branch], repo_path)
-        _run_git_command(["git", "branch", "-D", branch_result["branch_name"]], repo_path)
+        checkout_result = _run_git_command(["git", "checkout", base_branch], repo_path)
+        if not checkout_result["success"]:
+            results["status"] = "warning"
+            results["message"] = f"No changes to commit but failed to checkout {base_branch}"
+            results["branch"] = branch_result["branch_name"]
+            results["cleanup_error"] = checkout_result.get("stderr", "Unknown error")
+            return results
+
+        delete_result = _run_git_command(["git", "branch", "-D", branch_result["branch_name"]], repo_path)
+        if not delete_result["success"]:
+            results["status"] = "warning"
+            results["message"] = f"No changes to commit, returned to {base_branch} but failed to delete branch"
+            results["branch"] = branch_result["branch_name"]
+            results["cleanup_error"] = delete_result.get("stderr", "Unknown error")
+            return results
+
         results["status"] = "info"
-        results["message"] = "No changes to commit - branch cleaned up"
+        results["message"] = "No changes to commit - branch cleaned up successfully"
         return results
     elif commit_result["status"] != "success":
         # Error occurred - leave branch for manual investigation
